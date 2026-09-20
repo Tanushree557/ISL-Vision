@@ -1,193 +1,109 @@
-<<<<<<< HEAD
 import cv2
 import mediapipe as mp
-import csv
+import numpy as np
+import pandas as pd
 from pathlib import Path
 
-# Project folders
+# -----------------------------
+# Paths
+# -----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATASET_DIR = BASE_DIR / "dataset"
-
-# Output CSV
 OUTPUT_FILE = BASE_DIR / "landmarks.csv"
 
-# MediaPipe
+# -----------------------------
+# MediaPipe Hands
+# -----------------------------
 mp_hands = mp.solutions.hands
 
-# Store rows
-rows = []
-
-# Create MediaPipe Hands
-with mp_hands.Hands(
+hands = mp_hands.Hands(
     static_image_mode=True,
     max_num_hands=1,
     min_detection_confidence=0.5
-) as hands:
+)
 
-    # A to Z
-    for label in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+# -----------------------------
+# Store extracted data
+# -----------------------------
+data = []
 
-        folder = DATASET_DIR / label
+# -----------------------------
+# Read each letter folder
+# -----------------------------
+for letter_folder in sorted(DATASET_DIR.iterdir()):
 
-        if not folder.exists():
-            print(f"Folder not found: {label}")
+    if not letter_folder.is_dir():
+        continue
+
+    label = letter_folder.name.upper()
+
+    print(f"Processing letter: {label}")
+
+    for image_file in letter_folder.iterdir():
+
+        if image_file.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
             continue
 
-        print(f"Processing {label}...")
+        image = cv2.imread(str(image_file))
 
-        # Read images
-        for image_path in folder.iterdir():
+        if image is None:
+            continue
 
-            if image_path.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
-                continue
+        # Convert BGR → RGB
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            image = cv2.imread(str(image_path))
+        # Detect hand
+        results = hands.process(rgb_image)
 
-            if image is None:
-                continue
+        if not results.multi_hand_landmarks:
+            continue
 
-            # Convert BGR to RGB
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Use first detected hand
+        hand_landmarks = results.multi_hand_landmarks[0]
 
-            # Detect hand
-            results = hands.process(rgb_image)
+        # Wrist coordinates
+        wrist = hand_landmarks.landmark[0]
 
-            if results.multi_hand_landmarks:
+        features = []
 
-                hand = results.multi_hand_landmarks[0]
+        # Extract 21 landmarks
+        for landmark in hand_landmarks.landmark:
 
-                # Use wrist as reference point
-                wrist_x = hand.landmark[0].x
-                wrist_y = hand.landmark[0].y
-                wrist_z = hand.landmark[0].z
+            # Make coordinates relative to wrist
+            x = landmark.x - wrist.x
+            y = landmark.y - wrist.y
+            z = landmark.z - wrist.z
 
-                features = []
+            features.extend([x, y, z])
 
-                # 21 landmarks × 3 coordinates
-                for landmark in hand.landmark:
-                    features.extend([
-                        landmark.x - wrist_x,
-                        landmark.y - wrist_y,
-                        landmark.z - wrist_z
-                    ])
+        # 63 features + label
+        data.append(features + [label])
 
-                rows.append([label] + features)
-
-print("Writing landmark data...")
-
-# CSV header
-header = ["label"]
+# -----------------------------
+# Create DataFrame
+# -----------------------------
+columns = []
 
 for i in range(21):
-    header += [
+    columns.extend([
         f"x{i}",
         f"y{i}",
         f"z{i}"
-    ]
+    ])
 
+columns.append("label")
+
+df = pd.DataFrame(data, columns=columns)
+
+# -----------------------------
 # Save CSV
-with open(OUTPUT_FILE, "w", newline="") as file:
-    writer = csv.writer(file)
-    writer.writerow(header)
-    writer.writerows(rows)
+# -----------------------------
+df.to_csv(OUTPUT_FILE, index=False)
 
-print("DONE!")
-print(f"Total samples extracted: {len(rows)}")
+hands.close()
+
+print("\n--------------------------------")
+print("Landmark extraction completed!")
+print(f"Total samples: {len(df)}")
 print(f"Saved to: {OUTPUT_FILE}")
-=======
-import cv2
-import mediapipe as mp
-import csv
-from pathlib import Path
-
-# Project folders
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATASET_DIR = BASE_DIR / "dataset"
-
-# Output CSV
-OUTPUT_FILE = BASE_DIR / "landmarks.csv"
-
-# MediaPipe
-mp_hands = mp.solutions.hands
-
-# Store rows
-rows = []
-
-# Create MediaPipe Hands
-with mp_hands.Hands(
-    static_image_mode=True,
-    max_num_hands=1,
-    min_detection_confidence=0.5
-) as hands:
-
-    # A to Z
-    for label in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-
-        folder = DATASET_DIR / label
-
-        if not folder.exists():
-            print(f"Folder not found: {label}")
-            continue
-
-        print(f"Processing {label}...")
-
-        # Read images
-        for image_path in folder.iterdir():
-
-            if image_path.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
-                continue
-
-            image = cv2.imread(str(image_path))
-
-            if image is None:
-                continue
-
-            # Convert BGR to RGB
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-            # Detect hand
-            results = hands.process(rgb_image)
-
-            if results.multi_hand_landmarks:
-
-                hand = results.multi_hand_landmarks[0]
-
-                # Use wrist as reference point
-                wrist_x = hand.landmark[0].x
-                wrist_y = hand.landmark[0].y
-                wrist_z = hand.landmark[0].z
-
-                features = []
-
-                # 21 landmarks × 3 coordinates
-                for landmark in hand.landmark:
-                    features.extend([
-                        landmark.x - wrist_x,
-                        landmark.y - wrist_y,
-                        landmark.z - wrist_z
-                    ])
-
-                rows.append([label] + features)
-
-print("Writing landmark data...")
-
-# CSV header
-header = ["label"]
-
-for i in range(21):
-    header += [
-        f"x{i}",
-        f"y{i}",
-        f"z{i}"
-    ]
-
-# Save CSV
-with open(OUTPUT_FILE, "w", newline="") as file:
-    writer = csv.writer(file)
-    writer.writerow(header)
-    writer.writerows(rows)
-
-print("DONE!")
-print(f"Total samples extracted: {len(rows)}")
-print(f"Saved to: {OUTPUT_FILE}")
->>>>>>> d883cb8383c153224a3e94d3123eae9760cd482c
+print("--------------------------------")

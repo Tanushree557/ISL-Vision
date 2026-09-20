@@ -3,30 +3,66 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 from pathlib import Path
 
+
+# ============================================================
+# PATHS
+# ============================================================
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATASET_DIR = BASE_DIR / "dataset"
 
-# Find all letter folders
+
+# ============================================================
+# CHECK DATASET
+# ============================================================
+
+if not DATASET_DIR.exists():
+    raise FileNotFoundError(
+        f"Dataset folder not found:\n{DATASET_DIR}"
+    )
+
+
+# ============================================================
+# FIND A-Z LETTER FOLDERS
+# ============================================================
+
 letters = sorted([
     folder.name
     for folder in DATASET_DIR.iterdir()
     if folder.is_dir()
+    and len(folder.name) == 1
+    and folder.name.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 ])
+
+
+# ============================================================
+# MAIN WINDOW
+# ============================================================
 
 root = tk.Tk()
 
 root.title("ISL Vision - Learn A-Z")
-root.geometry("900x700")
-root.minsize(800, 600)
-root.configure(bg="#f4f6fb")
+
+root.geometry("1000x720")
+
+root.minsize(
+    850,
+    650
+)
+
+root.configure(
+    bg="#f4f6fb"
+)
+
 
 current_index = 0
+
 current_image = None
 
 
-# ---------------------------------
+# ============================================================
 # FIND LETTER IMAGES
-# ---------------------------------
+# ============================================================
 
 def find_letter_images(letter):
 
@@ -34,14 +70,17 @@ def find_letter_images(letter):
 
     image_files = []
 
-    for extension in [
+    extensions = [
         "*.jpg",
         "*.jpeg",
         "*.png",
         "*.JPG",
         "*.JPEG",
         "*.PNG"
-    ]:
+    ]
+
+    for extension in extensions:
+
         image_files.extend(
             letter_folder.glob(extension)
         )
@@ -49,17 +88,21 @@ def find_letter_images(letter):
     return sorted(image_files)
 
 
-# ---------------------------------
+# ============================================================
 # SHOW LETTER IMAGE
-# ---------------------------------
+# ============================================================
 
 def show_letter(letter):
 
     global current_image
 
-    image_files = find_letter_images(letter)
+    image_files = find_letter_images(
+        letter
+    )
 
     if not image_files:
+
+        current_image = None
 
         image_label.config(
             image="",
@@ -70,20 +113,34 @@ def show_letter(letter):
 
         return
 
+
     image_path = image_files[0]
+
 
     try:
 
-        image = Image.open(image_path)
+        image = Image.open(
+            image_path
+        )
 
-        image.thumbnail((500, 350))
 
-        current_image = ImageTk.PhotoImage(image)
+        # Keep image aspect ratio
+
+        image.thumbnail(
+            (500, 340)
+        )
+
+
+        current_image = ImageTk.PhotoImage(
+            image
+        )
+
 
         image_label.config(
             image=current_image,
             text=""
         )
+
 
     except Exception as error:
 
@@ -93,115 +150,190 @@ def show_letter(letter):
         )
 
 
-# ---------------------------------
+# ============================================================
 # SELECT LETTER
-# ---------------------------------
+# ============================================================
 
 def select_letter(letter):
 
     global current_index
 
+
     if letter not in letters:
         return
 
-    current_index = letters.index(letter)
+
+    current_index = letters.index(
+        letter
+    )
+
 
     selected_letter_label.config(
         text=letter.upper()
     )
 
-    show_letter(letter)
+
+    show_letter(
+        letter
+    )
 
 
-# ---------------------------------
+# ============================================================
 # NEXT LETTER
-# ---------------------------------
+# ============================================================
 
 def next_letter():
 
     global current_index
 
+
     if not letters:
         return
 
-    if current_index < len(letters) - 1:
 
-        current_index += 1
+    # Go to next letter
 
-        letter = letters[current_index]
-
-        selected_letter_label.config(
-            text=letter.upper()
-        )
-
-        show_letter(letter)
+    current_index = (
+        current_index + 1
+    ) % len(letters)
 
 
-# ---------------------------------
+    letter = letters[
+        current_index
+    ]
+
+
+    selected_letter_label.config(
+        text=letter.upper()
+    )
+
+
+    show_letter(
+        letter
+    )
+
+
+# ============================================================
 # PREVIOUS LETTER
-# ---------------------------------
+# ============================================================
 
 def previous_letter():
 
     global current_index
 
+
     if not letters:
         return
 
-    if current_index > 0:
 
-        current_index -= 1
-
-        letter = letters[current_index]
-
-        selected_letter_label.config(
-            text=letter.upper()
-        )
-
-        show_letter(letter)
+    current_index = (
+        current_index - 1
+    ) % len(letters)
 
 
-# ---------------------------------
+    letter = letters[
+        current_index
+    ]
+
+
+    selected_letter_label.config(
+        text=letter.upper()
+    )
+
+
+    show_letter(
+        letter
+    )
+
+
+# ============================================================
 # SEARCH LETTER
-# ---------------------------------
+# ============================================================
 
 def search_letter():
 
-    query = search_entry.get().strip().upper()
+    query = (
+        search_entry
+        .get()
+        .strip()
+    )
+
 
     if not query:
 
         messagebox.showinfo(
             "Search",
-            "Please enter a letter."
+            "Please enter a letter from A to Z."
         )
 
         return
 
-    if query in letters:
 
-        select_letter(query)
+    if len(query) != 1:
+
+        messagebox.showinfo(
+            "Invalid Letter",
+            "Please enter only one letter."
+        )
+
+        return
+
+
+    # Find letter regardless of uppercase/lowercase
+
+    matching_letter = None
+
+
+    for letter in letters:
+
+        if letter.upper() == query.upper():
+
+            matching_letter = letter
+
+            break
+
+
+    if matching_letter:
+
+        select_letter(
+            matching_letter
+        )
+
+        search_entry.delete(
+            0,
+            tk.END
+        )
+
 
     else:
 
         messagebox.showinfo(
             "Letter Not Found",
-            f"Letter '{query}' is not available."
+            f"Letter '{query.upper()}' is not available."
         )
 
 
-# ---------------------------------
+# ============================================================
+# ENTER KEY SEARCH
+# ============================================================
+
+def enter_search(event):
+
+    search_letter()
+
+
+# ============================================================
 # BACK TO MAIN MENU
-# ---------------------------------
+# ============================================================
 
 def go_back_to_main():
 
     root.destroy()
 
 
-# ---------------------------------
+# ============================================================
 # HEADER
-# ---------------------------------
+# ============================================================
 
 header = tk.Frame(
     root,
@@ -213,12 +345,14 @@ header.pack(
     fill="x"
 )
 
-header.pack_propagate(False)
+header.pack_propagate(
+    False
+)
 
 
-# ---------------------------------
+# ============================================================
 # TITLE
-# ---------------------------------
+# ============================================================
 
 title = tk.Label(
     header,
@@ -233,9 +367,9 @@ title.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # SUBTITLE
-# ---------------------------------
+# ============================================================
 
 subtitle = tk.Label(
     header,
@@ -248,9 +382,9 @@ subtitle = tk.Label(
 subtitle.pack()
 
 
-# ---------------------------------
+# ============================================================
 # BACK BUTTON
-# ---------------------------------
+# ============================================================
 
 back_button = tk.Button(
     header,
@@ -262,6 +396,7 @@ back_button = tk.Button(
     activebackground="#3d3685",
     activeforeground="white",
     relief="flat",
+    bd=0,
     cursor="hand2",
     padx=15,
     pady=7
@@ -274,9 +409,9 @@ back_button.place(
 )
 
 
-# ---------------------------------
+# ============================================================
 # MAIN CONTENT
-# ---------------------------------
+# ============================================================
 
 content = tk.Frame(
     root,
@@ -291,9 +426,9 @@ content.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # SEARCH AREA
-# ---------------------------------
+# ============================================================
 
 search_frame = tk.Frame(
     content,
@@ -322,12 +457,19 @@ search_label.pack(
 search_entry = tk.Entry(
     search_frame,
     font=("Arial", 13),
-    width=15
+    width=15,
+    justify="center"
 )
 
 search_entry.pack(
     side="left",
     padx=8
+)
+
+
+search_entry.bind(
+    "<Return>",
+    enter_search
 )
 
 
@@ -341,6 +483,7 @@ search_button = tk.Button(
     activebackground="#3d3685",
     activeforeground="white",
     relief="flat",
+    bd=0,
     cursor="hand2",
     padx=18,
     pady=7
@@ -352,13 +495,17 @@ search_button.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # SELECTED LETTER
-# ---------------------------------
+# ============================================================
 
 selected_letter_label = tk.Label(
     content,
-    text=letters[0].upper() if letters else "NO LETTERS",
+    text=(
+        letters[0].upper()
+        if letters
+        else "NO LETTERS"
+    ),
     font=("Arial", 32, "bold"),
     bg="white",
     fg="#5046a5",
@@ -371,22 +518,26 @@ selected_letter_label.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # IMAGE AREA
-# ---------------------------------
+# ============================================================
 
 image_frame = tk.Frame(
     content,
     bg="white",
     width=520,
-    height=330
+    height=350,
+    highlightbackground="#e3e4ec",
+    highlightthickness=1
 )
 
 image_frame.pack(
     pady=5
 )
 
-image_frame.pack_propagate(False)
+image_frame.pack_propagate(
+    False
+)
 
 
 image_label = tk.Label(
@@ -400,9 +551,9 @@ image_label.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # NAVIGATION
-# ---------------------------------
+# ============================================================
 
 navigation_frame = tk.Frame(
     content,
@@ -410,7 +561,7 @@ navigation_frame = tk.Frame(
 )
 
 navigation_frame.pack(
-    pady=8
+    pady=10
 )
 
 
@@ -423,6 +574,7 @@ previous_button = tk.Button(
     fg="#29254c",
     activebackground="#eeeeee",
     relief="flat",
+    bd=0,
     cursor="hand2",
     padx=20,
     pady=8
@@ -443,6 +595,7 @@ next_button = tk.Button(
     fg="#29254c",
     activebackground="#eeeeee",
     relief="flat",
+    bd=0,
     cursor="hand2",
     padx=20,
     pady=8
@@ -454,9 +607,9 @@ next_button.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # INFORMATION
-# ---------------------------------
+# ============================================================
 
 count_label = tk.Label(
     content,
@@ -473,7 +626,7 @@ count_label.pack(
 
 instruction_label = tk.Label(
     content,
-    text="Search a letter or use Previous / Next to learn ISL signs.",
+    text="Search A-Z or use Previous / Next to learn each ISL sign.",
     font=("Arial", 10),
     bg="#f4f6fb",
     fg="#666677"
@@ -484,9 +637,9 @@ instruction_label.pack(
 )
 
 
-# ---------------------------------
+# ============================================================
 # SHOW FIRST LETTER
-# ---------------------------------
+# ============================================================
 
 if letters:
 
@@ -495,8 +648,16 @@ if letters:
     )
 
 
-# ---------------------------------
+else:
+
+    image_label.config(
+        text="No A-Z dataset folders found.",
+        font=("Arial", 16, "bold")
+    )
+
+
+# ============================================================
 # START APPLICATION
-# ---------------------------------
+# ============================================================
 
 root.mainloop()

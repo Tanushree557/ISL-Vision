@@ -1,357 +1,587 @@
 import cv2
 import mediapipe as mp
 import joblib
-import numpy as np
+import pandas as pd
+import subprocess
+import time
+import threading
+import queue
 
 from pathlib import Path
+from collections import deque, Counter
+
+
+# =========================================================
+# MODEL
+# =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 MODEL_FILE = BASE_DIR / "letter_model.pkl"
 
 model = joblib.load(MODEL_FILE)
 
-print("ISL Letter Recognition Model Loaded")
+
+# =========================================================
+# WINDOWS VOICE SYSTEM
+# =========================================================
+
+voice_queue = queue.Queue()
+voice_running = True
+
+
+def voice_worker():
+
+    while voice_running:
+
+        try:
+            letter = voice_queue.get(timeout=0.1)
+
+        except queue.Empty:
+            continue
+
+        try:
+
+            print(f"Speaking: {letter}")
+
+            command = (
+                "Add-Type -AssemblyName System.Speech; "
+                "$speaker = New-Object "
+                "System.Speech.Synthesis.SpeechSynthesizer; "
+                f"$speaker.Speak('{letter}'); "
+                "$speaker.Dispose();"
+            )
+
+            subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    command
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+        except Exception as error:
+
+            print("Voice error:", error)
+
+        finally:
+
+            voice_queue.task_done()
+
+
+# Start ONE voice worker
+voice_thread = threading.Thread(
+    target=voice_worker,
+    daemon=True
+)
+
+voice_thread.start()
+
+
+def speak_letter(letter):
+
+    if letter != "-":
+
+        voice_queue.put(letter)
+
+
+# =========================================================
+# FEATURE NAMES - 63 FEATURES
+# =========================================================
+
+FEATURE_NAMES = []
+
+for i in range(21):
+
+    FEATURE_NAMES.extend([
+        f"x{i}",
+        f"y{i}",
+        f"z{i}"
+    ])
+
+
+# =========================================================
+# MEDIAPIPE
+# =========================================================
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
 
+
 hands = mp_hands.Hands(
+
     static_image_mode=False,
-    max_num_hands=1,
+
+    max_num_hands=2,
+
     min_detection_confidence=0.5,
+
     min_tracking_confidence=0.5
 )
 
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+# =========================================================
+# CAMERA
+# =========================================================
+
+cap = cv2.VideoCapture(
+    0,
+    cv2.CAP_DSHOW
+)
+
 
 if not cap.isOpened():
-    print("ERROR: Camera could not be opened.")
-    hands.close()
+
+    print("Camera could not be opened.")
+
+    voice_running = False
+
     exit()
 
-print("Camera started")
-print("Show an ISL letter A-Z")
-print("Press Q to exit")
-print("Press B or click BACK TO MAIN MENU to return")
 
-window_name = "ISL Vision - Letter Recognition"
+cap.set(
+    cv2.CAP_PROP_FRAME_WIDTH,
+    1280
+)
 
-back_clicked = False
-
-
-def mouse_callback(event, x, y, flags, param):
-
-    global back_clicked
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-
-        height, width = param
-
-        button_x1 = 20
-        button_y1 = height - 48
-        button_x2 = 220
-        button_y2 = height - 10
-
-        if (
-            button_x1 <= x <= button_x2
-            and button_y1 <= y <= button_y2
-        ):
-            back_clicked = True
+cap.set(
+    cv2.CAP_PROP_FRAME_HEIGHT,
+    720
+)
 
 
-cv2.namedWindow(window_name)
+# =========================================================
+# PREDICTION
+# =========================================================
+
+# General prediction smoothing
+prediction_history = deque(maxlen=5)
+
+current_letter = "-"
+
+
+# =========================================================
+# STABLE LETTER DETECTION
+# =========================================================
+
+# This stores recent predictions for voice confirmation
+stable_history = deque(maxlen=12)
+
+# Letter that was last spoken
+last_confirmed_letter = "-"
+
+# Number of identical predictions needed before speaking
+STABLE_FRAMES = 12
+
+
+# =========================================================
+# MAIN LOOP
+# =========================================================
 
 while True:
 
-    success, frame = cap.read()
+    ret, frame = cap.read()
 
-    if not success:
+    if not ret:
         break
+
+
+    # =====================================================
+    # MIRROR CAMERA
+    # =====================================================
 
     frame = cv2.flip(frame, 1)
 
     height, width = frame.shape[:2]
 
-    cv2.setMouseCallback(
-        window_name,
-        mouse_callback,
-        (height, width)
-    )
 
-    rgb = cv2.cvtColor(
+    # =====================================================
+    # RGB CONVERSION
+    # =====================================================
+
+    rgb_frame = cv2.cvtColor(
         frame,
         cv2.COLOR_BGR2RGB
     )
 
-    results = hands.process(rgb)
 
-    predicted_letter = ""
+    results = hands.process(
+        rgb_frame
+    )
+
+
+    # =====================================================
+    # HAND DETECTED
+    # =====================================================
 
     if results.multi_hand_landmarks:
 
+        # -------------------------------------------------
+        # DRAW LANDMARKS ON ALL HANDS
+        # -------------------------------------------------
+
+        for detected_hand in results.multi_hand_landmarks:
+
+            mp_draw.draw_landmarks(
+                frame,
+                detected_hand,
+                mp_hands.HAND_CONNECTIONS
+            )
+
+
+        # -------------------------------------------------
+        # FIRST HAND → LETTER RECOGNITION
+        # -------------------------------------------------
+
         hand = results.multi_hand_landmarks[0]
 
-        wrist_x = hand.landmark[0].x
-        wrist_y = hand.landmark[0].y
-        wrist_z = hand.landmark[0].z
+        wrist = hand.landmark[0]
 
         features = []
 
+
         for landmark in hand.landmark:
 
+            x = landmark.x - wrist.x
+            y = landmark.y - wrist.y
+            z = landmark.z - wrist.z
+
             features.extend([
-                landmark.x - wrist_x,
-                landmark.y - wrist_y,
-                landmark.z - wrist_z
+                x,
+                y,
+                z
             ])
 
-        input_data = np.array(
-            features
-        ).reshape(1, -1)
 
-        predicted_letter = model.predict(
-            input_data
-        )[0]
+        # -------------------------------------------------
+        # CREATE MODEL INPUT
+        # -------------------------------------------------
 
-        mp_draw.draw_landmarks(
-            frame,
-            hand,
-            mp_hands.HAND_CONNECTIONS
+        input_data = pd.DataFrame(
+            [features],
+            columns=FEATURE_NAMES
         )
 
-    # -------------------------------
-    # TOP HEADER
-    # -------------------------------
 
-    overlay = frame.copy()
+        # -------------------------------------------------
+        # PREDICTION
+        # -------------------------------------------------
+
+        try:
+
+            prediction = model.predict(
+                input_data
+            )[0]
+
+
+            # Add prediction to normal smoothing
+            prediction_history.append(
+                prediction
+            )
+
+
+            # Current displayed letter
+            current_letter = Counter(
+                prediction_history
+            ).most_common(1)[0][0]
+
+
+            # =================================================
+            # STABLE PREDICTION FOR VOICE
+            # =================================================
+
+            stable_history.append(
+                prediction
+            )
+
+
+            # Check whether all recent predictions
+            # are the same
+            if len(stable_history) == STABLE_FRAMES:
+
+                stable_letter = Counter(
+                    stable_history
+                ).most_common(1)[0][0]
+
+
+                # Count how many times this letter occurred
+                stable_count = stable_history.count(
+                    stable_letter
+                )
+
+
+                # -------------------------------------------------
+                # ONLY SPEAK IF LETTER IS REALLY STABLE
+                # -------------------------------------------------
+
+                if (
+
+                    stable_count == STABLE_FRAMES
+
+                    and stable_letter != last_confirmed_letter
+
+                ):
+
+                    print(
+                        f"Confirmed letter: {stable_letter}"
+                    )
+
+                    speak_letter(
+                        stable_letter
+                    )
+
+                    last_confirmed_letter = stable_letter
+
+                    # Clear history so a new letter
+                    # must become stable again
+                    stable_history.clear()
+
+
+        except Exception as error:
+
+            print(
+                "Prediction error:",
+                error
+            )
+
+            current_letter = "-"
+
+            stable_history.clear()
+
+
+        # -------------------------------------------------
+        # STATUS
+        # -------------------------------------------------
+
+        cv2.putText(
+            frame,
+            "HAND DETECTED",
+            (30, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 220, 100),
+            2
+        )
+
+
+    # =====================================================
+    # NO HAND
+    # =====================================================
+
+    else:
+
+        current_letter = "-"
+
+        prediction_history.clear()
+
+        stable_history.clear()
+
+        # Allow the same letter to be spoken
+        # when the hand is shown again
+        last_confirmed_letter = "-"
+
+
+        cv2.putText(
+            frame,
+            "SHOW YOUR HAND",
+            (30, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 180, 255),
+            2
+        )
+
+
+    # =====================================================
+    # HEADER
+    # =====================================================
 
     cv2.rectangle(
-        overlay,
+        frame,
         (0, 0),
-        (width, 75),
-        (45, 45, 75),
+        (width, 110),
+        (45, 30, 75),
         -1
     )
 
-    frame = cv2.addWeighted(
-        overlay,
-        0.90,
-        frame,
-        0.10,
-        0
-    )
 
     cv2.putText(
         frame,
-        "ISL",
-        (25, 47),
+        "ISL LETTER RECOGNITION",
+        (30, 50),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.75,
+        1.1,
         (255, 255, 255),
         2
     )
 
+
     cv2.putText(
         frame,
-        "LETTER RECOGNITION",
-        (82, 47),
+        "Indian Sign Language - A to Z",
+        (30, 85),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.70,
-        (255, 255, 255),
-        2
+        0.65,
+        (220, 220, 220),
+        1
     )
 
-    # -------------------------------
-    # DETECTED LETTER CARD
-    # -------------------------------
 
-    card_x1 = width - 300
-    card_y1 = 100
-    card_x2 = width - 25
-    card_y2 = 280
+    # =====================================================
+    # DETECTED LETTER BOX
+    # =====================================================
 
-    card_overlay = frame.copy()
+    box_left = width - 330
+    box_top = 130
+    box_right = width - 30
+    box_bottom = 390
+
 
     cv2.rectangle(
-        card_overlay,
-        (card_x1, card_y1),
-        (card_x2, card_y2),
-        (255, 255, 255),
+        frame,
+        (box_left, box_top),
+        (box_right, box_bottom),
+        (55, 45, 85),
         -1
     )
 
-    frame = cv2.addWeighted(
-        card_overlay,
-        0.94,
+
+    cv2.rectangle(
         frame,
-        0.06,
-        0
+        (box_left, box_top),
+        (box_right, box_bottom),
+        (255, 255, 255),
+        2
     )
+
 
     cv2.putText(
         frame,
         "DETECTED LETTER",
-        (card_x1 + 20, card_y1 + 35),
+        (box_left + 35, box_top + 50),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.45,
-        (100, 100, 110),
-        1
+        0.65,
+        (220, 220, 220),
+        2
     )
 
-    if predicted_letter:
 
-        cv2.putText(
-            frame,
-            predicted_letter.upper(),
-            (card_x1 + 95, card_y1 + 125),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            2.5,
-            (80, 70, 210),
-            5
-        )
+    # =====================================================
+    # ACTUAL LETTER
+    # =====================================================
 
-    else:
+    cv2.putText(
+        frame,
+        str(current_letter),
+        (box_left + 105, box_top + 210),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        5.0,
+        (255, 255, 255),
+        9
+    )
 
-        cv2.putText(
-            frame,
-            "--",
-            (card_x1 + 105, card_y1 + 125),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            2.0,
-            (140, 140, 150),
-            4
-        )
 
-        cv2.putText(
-            frame,
-            "Show your hand",
-            (card_x1 + 65, card_y1 + 160),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.40,
-            (120, 120, 130),
-            1
-        )
-
-    # -------------------------------
-    # STATUS
-    # -------------------------------
+    # =====================================================
+    # NUMBER OF HANDS
+    # =====================================================
 
     if results.multi_hand_landmarks:
 
-        status = "HAND DETECTED"
-        status_color = (90, 190, 110)
+        count = len(
+            results.multi_hand_landmarks
+        )
 
-    else:
 
-        status = "WAITING FOR HAND"
-        status_color = (170, 170, 170)
+        cv2.putText(
+            frame,
+            f"Hands detected: {count}",
+            (30, 190),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 255, 255),
+            2
+        )
 
-    cv2.circle(
-        frame,
-        (card_x1 + 25, card_y2 - 25),
-        6,
-        status_color,
-        -1
-    )
+
+    # =====================================================
+    # VOICE STATUS
+    # =====================================================
 
     cv2.putText(
         frame,
-        status,
-        (card_x1 + 40, card_y2 - 20),
+        "Voice: ON",
+        (30, 230),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.38,
-        (90, 90, 100),
+        0.65,
+        (255, 255, 255),
+        2
+    )
+
+
+    # =====================================================
+    # VOICE CONFIRMATION STATUS
+    # =====================================================
+
+    stable_count_display = len(stable_history)
+
+    cv2.putText(
+        frame,
+        f"Voice confirmation: {stable_count_display}/{STABLE_FRAMES}",
+        (30, 270),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (220, 220, 220),
         1
     )
 
-    # -------------------------------
-    # BOTTOM BAR
-    # -------------------------------
 
-    bottom_overlay = frame.copy()
-
-    cv2.rectangle(
-        bottom_overlay,
-        (0, height - 55),
-        (width, height),
-        (45, 45, 75),
-        -1
-    )
-
-    frame = cv2.addWeighted(
-        bottom_overlay,
-        0.92,
-        frame,
-        0.08,
-        0
-    )
-
-    # Back button
-
-    cv2.rectangle(
-        frame,
-        (20, height - 48),
-        (220, height - 10),
-        (80, 70, 150),
-        -1
-    )
+    # =====================================================
+    # INSTRUCTION
+    # =====================================================
 
     cv2.putText(
         frame,
-        "< BACK TO MAIN MENU",
-        (32, height - 23),
+        "Press Q to exit",
+        (width - 220, height - 30),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.42,
+        0.55,
         (255, 255, 255),
         1
     )
 
-    cv2.putText(
-        frame,
-        "Show an ISL letter A-Z",
-        (245, height - 22),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.50,
-        (255, 255, 255),
-        1
-    )
 
-    cv2.putText(
-        frame,
-        "Q = Exit",
-        (width - 90, height - 22),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.42,
-        (220, 220, 230),
-        1
-    )
+    # =====================================================
+    # SHOW CAMERA
+    # =====================================================
 
     cv2.imshow(
-        window_name,
+        "ISL LETTER RECOGNITION",
         frame
     )
 
-    # -------------------------------
-    # KEYBOARD CONTROLS
-    # -------------------------------
+
+    # =====================================================
+    # EXIT
+    # =====================================================
 
     key = cv2.waitKey(1) & 0xFF
 
-    if key == ord("q"):
+
+    if key == ord("q") or key == ord("Q"):
+
         break
 
-    if key == ord("b"):
-        break
 
-    if back_clicked:
-        break
+# =========================================================
+# CLEANUP
+# =========================================================
 
+voice_running = False
 
 cap.release()
 
 hands.close()
 
 cv2.destroyAllWindows()
-
-print("Letter Recognition Closed")
