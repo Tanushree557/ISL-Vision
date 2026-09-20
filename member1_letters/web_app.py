@@ -5,49 +5,36 @@ import numpy as np
 import joblib
 from pathlib import Path
 import base64
-import os
 
 app = Flask(__name__)
 
-# ============================================================
-# PATHS
-# ============================================================
-
 BASE_DIR = Path(__file__).resolve().parent
-DATASET_DIR = BASE_DIR / "dataset"
 MODEL_FILE = BASE_DIR / "letter_model.pkl"
-
-# ============================================================
-# LOAD MODEL
-# ============================================================
-
-if not MODEL_FILE.exists():
-    raise FileNotFoundError(f"Model not found: {MODEL_FILE}")
+LEARNING_DIR = BASE_DIR / "learning_images"
 
 model = joblib.load(MODEL_FILE)
-
-# ============================================================
-# MEDIAPIPE
-# Two real hands can be detected.
-# Each hand is processed separately by the existing
-# one-hand Random Forest model.
-# ============================================================
 
 mp_hands = mp.solutions.hands
 
 hands = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=2,
-    min_detection_confidence=0.65,
-    min_tracking_confidence=0.65
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
 )
 
-# ============================================================
-# CSS
-# ============================================================
+HTML = r"""
+<!DOCTYPE html>
+<html lang="en">
 
-STYLE = """
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AI-Based Indian Sign Language Recognition</title>
+
 <style>
+
 * {
     box-sizing: border-box;
 }
@@ -56,69 +43,76 @@ body {
     margin: 0;
     font-family: Arial, sans-serif;
     background: #f4f7fb;
-    color: #111827;
+    color: #172033;
 }
 
 .header {
-    background: #111827;
+    background: #172033;
     color: white;
     padding: 18px;
     text-align: center;
-    font-size: 28px;
-    font-weight: bold;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.header p {
+    margin: 7px 0 0;
+    font-size: 14px;
 }
 
 .container {
-    max-width: 1000px;
-    margin: 25px auto;
-    padding: 20px;
-    text-align: center;
+    max-width: 950px;
+    margin: 24px auto;
+    padding: 0 15px;
 }
 
-h1 {
-    font-size: 34px;
-    margin-bottom: 10px;
+.tabs {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
 }
 
-.subtitle {
-    color: #6b7280;
-    margin-bottom: 30px;
-}
-
-.button {
-    border: none;
-    padding: 13px 25px;
-    margin: 8px;
+button {
+    border: 0;
     border-radius: 10px;
-    background: #111827;
-    color: white;
-    font-size: 16px;
+    padding: 11px 17px;
+    font-size: 15px;
     cursor: pointer;
 }
 
-.button:hover {
-    background: #374151;
+.tab-btn {
+    background: #dfe6f2;
+    color: #172033;
 }
 
-.back-button {
-    background: #4b5563;
+.tab-btn.active {
+    background: #172033;
+    color: white;
 }
 
-.exit-button {
-    background: #991b1b;
+.panel {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
 }
 
-/* ==========================================================
-   CAMERA
-   ========================================================== */
+#learningPanel {
+    display: none;
+}
 
-.camera-area {
+.camera-box {
     position: relative;
-    width: 760px;
-    max-width: 95vw;
-    margin: 20px auto;
+    width: 100%;
+    max-width: 720px;
+    margin: auto;
     background: black;
-    border-radius: 12px;
+    border-radius: 14px;
     overflow: hidden;
 }
 
@@ -128,7 +122,7 @@ h1 {
     transform: scaleX(-1);
 }
 
-#landmarkCanvas {
+#overlay {
     position: absolute;
     left: 0;
     top: 0;
@@ -138,1084 +132,979 @@ h1 {
     transform: scaleX(-1);
 }
 
-.prediction {
-    font-size: 60px;
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 18px 0;
+}
+
+.start {
+    background: #172033;
+    color: white;
+}
+
+.stop {
+    background: #e5e9f0;
+    color: #172033;
+}
+
+.result-box {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.result-label {
+    font-size: 15px;
+    color: #687386;
+}
+
+#letter {
+    font-size: 82px;
     font-weight: bold;
-    margin: 12px;
-    min-height: 70px;
+    min-height: 100px;
+    margin-top: 5px;
 }
 
-.detected {
-    font-size: 17px;
-    color: #4b5563;
-    margin-bottom: 10px;
+#status {
+    color: #687386;
+    min-height: 24px;
 }
 
-/* ==========================================================
-   LEARNING
-   ========================================================== */
-
-.learning-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
-    max-width: 850px;
-    margin: 25px auto;
-}
-
-.letter-button {
-    padding: 17px 10px;
-    font-size: 24px;
-    font-weight: bold;
-    border: 2px solid #d1d5db;
-    border-radius: 12px;
-    background: white;
-    cursor: pointer;
-}
-
-.letter-button:hover {
-    background: #e5e7eb;
-}
-
-.learning-image {
-    margin: 25px auto;
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    max-width: 450px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-
-.learning-image img {
-    width: 100%;
-    height: 350px;
-    object-fit: contain;
-    border-radius: 8px;
+.small {
+    font-size: 13px;
+    color: #687386;
+    text-align: center;
+    margin-top: 14px;
 }
 
 .learning-title {
-    font-size: 26px;
+    text-align: center;
+}
+
+.letter-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(55px, 1fr));
+    gap: 9px;
+    margin-top: 20px;
+}
+
+.letter-btn {
+    background: #e9eef7;
+    color: #172033;
     font-weight: bold;
-    margin-bottom: 15px;
 }
 
-.message {
-    background: white;
-    padding: 25px;
+.learning-card {
+    max-width: 520px;
     margin: 25px auto;
-    max-width: 700px;
+    text-align: center;
+}
+
+#learningImage {
+    max-width: 100%;
+    max-height: 450px;
     border-radius: 12px;
+    display: none;
+    margin: 15px auto;
 }
 
-@media (max-width: 700px) {
-    .learning-grid {
-        grid-template-columns: repeat(4, 1fr);
-    }
-
-    .camera-area {
-        width: 95vw;
-    }
-
-    .prediction {
-        font-size: 48px;
-    }
+#learningMessage {
+    color: #687386;
+    min-height: 25px;
 }
+
 </style>
-"""
-
-# ============================================================
-# HOME PAGE
-# ============================================================
-
-HOME_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>ISL Vision</title>
-    {{ style|safe }}
-</head>
-<body>
-
-<div class="header">ISL VISION</div>
-
-<div class="container">
-
-    <h1>Indian Sign Language Recognition</h1>
-
-    <div class="subtitle">
-        AI-Powered Indian Sign Language A–Z Recognition
-    </div>
-
-    <button class="button" onclick="location.href='/recognize'">
-        A–Z RECOGNITION
-    </button>
-
-    <button class="button" onclick="location.href='/learning'">
-        LEARN A–Z
-    </button>
-
-    <button class="button exit-button" onclick="location.href='/exit'">
-        EXIT
-    </button>
-
-</div>
-
-</body>
-</html>
-"""
-
-# ============================================================
-# RECOGNITION PAGE
-# ============================================================
-
-RECOGNITION_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>A–Z Recognition</title>
-    {{ style|safe }}
 </head>
 
 <body>
 
-<div class="header">ISL VISION</div>
+<div class="header">
+
+    <h1>AI-Based Indian Sign Language Recognition</h1>
+
+    <p>A–Z Letter Recognition and Learning</p>
+
+</div>
+
 
 <div class="container">
 
-    <h1>A–Z Recognition</h1>
 
-    <div class="camera-area">
-        <video id="video" autoplay playsinline></video>
-        <canvas id="landmarkCanvas"></canvas>
-    </div>
+<div class="tabs">
 
-    <!-- ONLY ONE FINAL LETTER IS SHOWN -->
-    <div class="prediction" id="prediction">-</div>
+    <button
+        class="tab-btn active"
+        id="recognitionTab"
+        onclick="showRecognition()">
 
-    <div class="detected" id="handCount">
-        No hands detected
-    </div>
+        Letter Recognition
 
-    <button class="button" id="startButton" onclick="startCamera()">
-        START CAMERA
     </button>
 
-    <button class="button back-button" onclick="goBack()">
-        ← BACK
+
+    <button
+        class="tab-btn"
+        id="learningTab"
+        onclick="showLearning()">
+
+        Learning Mode
+
     </button>
 
 </div>
+
+
+<div class="panel" id="cameraPanel">
+
+    <div class="camera-box">
+
+        <video
+            id="video"
+            autoplay
+            playsinline
+            muted>
+        </video>
+
+        <canvas id="overlay"></canvas>
+
+    </div>
+
+
+    <div class="controls">
+
+        <button
+            class="start"
+            onclick="startCamera()">
+
+            Start Camera
+
+        </button>
+
+
+        <button
+            class="stop"
+            onclick="stopCamera()">
+
+            Stop Camera
+
+        </button>
+
+    </div>
+
+
+    <div class="result-box">
+
+        <div class="result-label">
+            Detected Letter
+        </div>
+
+        <div id="letter">
+            —
+        </div>
+
+        <div id="status">
+            Click Start Camera
+        </div>
+
+    </div>
+
+
+    <div class="small">
+        Hold one clear ISL hand sign in front of the camera.
+    </div>
+
+</div>
+
+
+<div class="panel" id="learningPanel">
+
+    <h2 class="learning-title">
+        ISL A–Z Learning Mode
+    </h2>
+
+    <p class="small">
+        Select a letter to view its ISL sign.
+    </p>
+
+
+    <div
+        class="letter-buttons"
+        id="letterButtons">
+    </div>
+
+
+    <div class="learning-card">
+
+        <h2 id="selectedLetter">
+            Select a letter
+        </h2>
+
+
+        <img
+            id="learningImage"
+            alt="ISL sign">
+
+
+        <div id="learningMessage">
+            Choose A–Z above.
+        </div>
+
+    </div>
+
+</div>
+
+
+</div>
+
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("landmarkCanvas");
-const ctx = canvas.getContext("2d");
 
-const predictionText = document.getElementById("prediction");
-const handCountText = document.getElementById("handCount");
-const startButton = document.getElementById("startButton");
+const video = document.getElementById("video");
+
+const overlay = document.getElementById("overlay");
+
+const ctx = overlay.getContext("2d");
 
 let stream = null;
+
+let running = false;
+
 let timer = null;
 
-let lastFinalLetter = "";
+let processing = false;
+
+let stableLetter = "";
+
 let stableCount = 0;
-let lastSpoken = "";
 
-/*
-   Landmark smoothing.
-   This keeps the red dots and green lines from jumping.
-*/
-let previousHands = [];
+let lastSpokenLetter = "";
+
+let noHandCount = 0;
+
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 
-/* ==========================================================
-   START CAMERA
-   ========================================================== */
+function showRecognition() {
+
+    document.getElementById("cameraPanel").style.display = "block";
+
+    document.getElementById("learningPanel").style.display = "none";
+
+    document.getElementById("recognitionTab").classList.add("active");
+
+    document.getElementById("learningTab").classList.remove("active");
+
+}
+
+
+function showLearning() {
+
+    document.getElementById("cameraPanel").style.display = "none";
+
+    document.getElementById("learningPanel").style.display = "block";
+
+    document.getElementById("recognitionTab").classList.remove("active");
+
+    document.getElementById("learningTab").classList.add("active");
+
+    stopCamera();
+
+}
+
+
+function buildLetterButtons() {
+
+    const box = document.getElementById("letterButtons");
+
+    letters.forEach(function(letter) {
+
+        const button = document.createElement("button");
+
+        button.className = "letter-btn";
+
+        button.textContent = letter;
+
+        button.onclick = function() {
+
+            loadLearningLetter(letter);
+
+        };
+
+        box.appendChild(button);
+
+    });
+
+}
+
+
+async function loadLearningLetter(letter) {
+
+    const title = document.getElementById("selectedLetter");
+
+    const img = document.getElementById("learningImage");
+
+    const message = document.getElementById("learningMessage");
+
+    title.textContent = letter;
+
+    img.style.display = "none";
+
+    message.textContent = "Loading...";
+
+    try {
+
+        const response = await fetch("/learning/" + letter);
+
+        if (!response.ok) {
+
+            message.textContent = "Image not found.";
+
+            return;
+
+        }
+
+        img.src = "/learning/" + letter + "?t=" + Date.now();
+
+        img.onload = function() {
+
+            img.style.display = "block";
+
+            message.textContent = "ISL sign for " + letter;
+
+        };
+
+        img.onerror = function() {
+
+            img.style.display = "none";
+
+            message.textContent = "Image not found.";
+
+        };
+
+    } catch (error) {
+
+        message.textContent = "Image could not be loaded.";
+
+    }
+
+}
+
+
+function resizeCanvas() {
+
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+
+        overlay.width = video.videoWidth;
+
+        overlay.height = video.videoHeight;
+
+    }
+
+}
+
 
 async function startCamera() {
+
+    if (running) {
+        return;
+    }
+
+    if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+    ) {
+
+        document.getElementById("status").textContent =
+            "Camera is not supported by this browser.";
+
+        return;
+
+    }
+
     try {
+
+        document.getElementById("status").textContent =
+            "Requesting camera...";
+
+
         stream = await navigator.mediaDevices.getUserMedia({
+
             video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
                 facingMode: "user"
             },
+
             audio: false
+
         });
 
+
         video.srcObject = stream;
+
+
+        await new Promise(function(resolve) {
+
+            if (
+                video.readyState >= 2 &&
+                video.videoWidth > 0
+            ) {
+
+                resolve();
+
+            } else {
+
+                video.onloadedmetadata = function() {
+                    resolve();
+                };
+
+            }
+
+        });
+
+
         await video.play();
+
+
+        while (
+            video.videoWidth === 0 ||
+            video.videoHeight === 0
+        ) {
+
+            await new Promise(function(resolve) {
+
+                setTimeout(resolve, 100);
+
+            });
+
+        }
+
 
         resizeCanvas();
 
-        startButton.innerText = "CAMERA RUNNING";
 
-        if (timer !== null) {
-            clearInterval(timer);
-        }
+        running = true;
 
-        timer = setInterval(recognizeFrame, 250);
+        processing = false;
+
+        stableLetter = "";
+
+        stableCount = 0;
+
+        lastSpokenLetter = "";
+
+        noHandCount = 0;
+
+
+        document.getElementById("status").textContent =
+            "Camera running...";
+
+
+        timer = setInterval(
+            processFrame,
+            350
+        );
+
+
     } catch (error) {
+
         console.error(error);
-        alert("Please allow camera permission.");
+
+        document.getElementById("status").textContent =
+            "Camera could not be started. Allow camera permission.";
+
     }
+
 }
 
 
-/* ==========================================================
-   CANVAS SIZE
-   ========================================================== */
+function stopCamera() {
 
-function resizeCanvas() {
-    if (video.videoWidth === 0) {
-        return;
+    running = false;
+
+    processing = false;
+
+
+    if (timer) {
+
+        clearInterval(timer);
+
+        timer = null;
+
     }
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-}
 
+    if (stream) {
 
-/* ==========================================================
-   SMOOTH LANDMARKS
-   ========================================================== */
+        stream.getTracks().forEach(function(track) {
 
-function smoothHands(currentHands) {
-    const alpha = 0.65;
+            track.stop();
 
-    if (previousHands.length !== currentHands.length) {
-        previousHands = currentHands.map(hand => ({
-            points: hand.points.map(p => ({
-                x: p.x,
-                y: p.y,
-                z: p.z
-            })),
-            connections: hand.connections
-        }));
-
-        return currentHands;
-    }
-
-    const smoothed = [];
-
-    for (let h = 0; h < currentHands.length; h++) {
-        const current = currentHands[h];
-        const previous = previousHands[h];
-
-        const points = [];
-
-        for (let i = 0; i < current.points.length; i++) {
-            points.push({
-                x: alpha * current.points[i].x +
-                   (1 - alpha) * previous.points[i].x,
-
-                y: alpha * current.points[i].y +
-                   (1 - alpha) * previous.points[i].y,
-
-                z: alpha * current.points[i].z +
-                   (1 - alpha) * previous.points[i].z
-            });
-        }
-
-        smoothed.push({
-            points: points,
-            connections: current.connections
         });
+
+        stream = null;
+
     }
 
-    previousHands = smoothed;
 
-    return smoothed;
-}
+    video.srcObject = null;
 
 
-/* ==========================================================
-   RECOGNIZE FRAME
-   ========================================================== */
-
-async function recognizeFrame() {
-    if (!stream || video.readyState < 2) {
-        return;
-    }
-
-    resizeCanvas();
-
-    /*
-       IMPORTANT:
-       The image sent to Python is NOT flipped.
-       This keeps the model input consistent with the
-       original working recognition program.
-    */
-
-    const capture = document.createElement("canvas");
-
-    capture.width = video.videoWidth;
-    capture.height = video.videoHeight;
-
-    const captureCtx = capture.getContext("2d");
-
-    captureCtx.drawImage(
-        video,
+    ctx.clearRect(
         0,
         0,
-        capture.width,
-        capture.height
+        overlay.width,
+        overlay.height
     );
 
-    const imageData = capture.toDataURL("image/png");
+
+    document.getElementById("status").textContent =
+        "Camera stopped.";
+
+}
+
+
+async function processFrame() {
+
+    if (!running) {
+        return;
+    }
+
+    if (processing) {
+        return;
+    }
+
+    if (
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+    ) {
+        return;
+    }
+
+
+    processing = true;
+
 
     try {
-        const response = await fetch("/predict", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                image: imageData
-            })
-        });
 
-        const result = await response.json();
+        const canvas = document.createElement("canvas");
 
-        ctx.clearRect(
+        canvas.width = video.videoWidth;
+
+        canvas.height = video.videoHeight;
+
+
+        const c = canvas.getContext("2d");
+
+
+        c.drawImage(
+            video,
             0,
             0,
             canvas.width,
             canvas.height
         );
 
-        /* ==================================================
-           LANDMARKS FOR 0, 1 OR 2 REAL HANDS
-           ================================================== */
 
-        if (result.hands && result.hands.length > 0) {
-
-            const visibleHands =
-                smoothHands(result.hands);
-
-            handCountText.innerText =
-                visibleHands.length +
-                (visibleHands.length === 1
-                    ? " hand detected"
-                    : " hands detected");
-
-            for (const hand of visibleHands) {
-
-                ctx.strokeStyle = "#39ff14";
-                ctx.lineWidth = 3;
-
-                for (const connection of hand.connections) {
-
-                    const p1 =
-                        hand.points[connection[0]];
-
-                    const p2 =
-                        hand.points[connection[1]];
-
-                    /*
-                       The canvas is mirrored together with
-                       the video using CSS, so we use the
-                       original MediaPipe X coordinate here.
-                    */
-
-                    const x1 =
-                        p1.x * canvas.width;
-
-                    const y1 =
-                        p1.y * canvas.height;
-
-                    const x2 =
-                        p2.x * canvas.width;
-
-                    const y2 =
-                        p2.y * canvas.height;
-
-                    ctx.beginPath();
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
-                }
-
-                for (const point of hand.points) {
-
-                    const x =
-                        point.x * canvas.width;
-
-                    const y =
-                        point.y * canvas.height;
-
-                    ctx.beginPath();
-
-                    ctx.arc(
-                        x,
-                        y,
-                        5,
-                        0,
-                        Math.PI * 2
-                    );
-
-                    ctx.fillStyle = "#ff3030";
-                    ctx.fill();
-                }
-            }
-
-        } else {
-
-            handCountText.innerText =
-                "No hands detected";
-
-            previousHands = [];
-        }
-
-
-        /* ==================================================
-           FINAL LETTER
-
-           IMPORTANT:
-           We do NOT display:
-              LEFT: A
-              RIGHT: B
-
-           We display ONLY:
-              A
-
-           If both hands produce the same letter, that
-           letter is used.
-
-           If they differ, the first stable hand prediction
-           is used. The user sees only ONE final letter.
-           ================================================== */
-
-        let finalLetter = null;
-
-        if (
-            result.predictions &&
-            result.predictions.length > 0
-        ) {
-
-            const predictions =
-                result.predictions.filter(
-                    letter =>
-                        letter !== null &&
-                        letter !== undefined &&
-                        letter !== ""
-                );
-
-            if (predictions.length === 1) {
-
-                finalLetter = predictions[0];
-
-            } else if (predictions.length > 1) {
-
-                /*
-                   If both hands give the same letter,
-                   use that letter.
-                */
-
-                if (
-                    predictions.every(
-                        letter =>
-                            letter === predictions[0]
-                    )
-                ) {
-
-                    finalLetter =
-                        predictions[0];
-
-                } else {
-
-                    /*
-                       Different letters on two hands:
-                       keep ONE final letter instead of
-                       showing left/right labels.
-                    */
-
-                    finalLetter =
-                        predictions[0];
-                }
-            }
-        }
-
-
-        /* ==================================================
-           STABLE FINAL LETTER
-           ================================================== */
-
-        if (finalLetter) {
-
-            predictionText.innerText =
-                finalLetter;
-
-            if (
-                finalLetter === lastFinalLetter
-            ) {
-
-                stableCount++;
-
-            } else {
-
-                lastFinalLetter =
-                    finalLetter;
-
-                stableCount = 1;
-            }
-
-            /*
-               4 × 250 ms ≈ 1 second.
-            */
-
-            if (
-                stableCount >= 4 &&
-                lastSpoken !== finalLetter
-            ) {
-
-                speakLetter(finalLetter);
-
-                lastSpoken =
-                    finalLetter;
-            }
-
-        } else {
-
-            predictionText.innerText = "-";
-
-            lastFinalLetter = "";
-            stableCount = 0;
-        }
-
-    } catch (error) {
-        console.error(
-            "Recognition error:",
-            error
-        );
-    }
-}
-
-
-/* ==========================================================
-   SPEAK ONLY THE FINAL LETTER
-   ========================================================== */
-
-function speakLetter(letter) {
-
-    if (!window.speechSynthesis) {
-        return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    const speech =
-        new SpeechSynthesisUtterance(letter);
-
-    speech.rate = 0.9;
-    speech.pitch = 1.0;
-    speech.volume = 1.0;
-
-    window.speechSynthesis.speak(speech);
-}
-
-
-/* ==========================================================
-   STOP CAMERA
-   ========================================================== */
-
-function stopCamera() {
-
-    if (timer !== null) {
-        clearInterval(timer);
-        timer = null;
-    }
-
-    if (stream) {
-        stream.getTracks().forEach(
-            track => track.stop()
-        );
-
-        stream = null;
-    }
-
-    video.srcObject = null;
-
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
-
-    previousHands = [];
-}
-
-
-/* ==========================================================
-   BACK
-   ========================================================== */
-
-function goBack() {
-    stopCamera();
-    window.location.href = "/";
-}
-
-window.addEventListener(
-    "beforeunload",
-    stopCamera
-);
-</script>
-
-</body>
-</html>
-"""
-
-# ============================================================
-# LEARNING PAGE
-# ============================================================
-
-LEARNING_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Learn A–Z</title>
-    {{ style|safe }}
-</head>
-
-<body>
-
-<div class="header">ISL VISION</div>
-
-<div class="container">
-
-    <h1>Learn A–Z</h1>
-
-    <div class="subtitle">
-        Select a letter to view its ISL sign.
-    </div>
-
-    <div class="learning-grid">
-
-        {% for letter in letters %}
-
-        <button
-            class="letter-button"
-            onclick="showLetter('{{ letter }}')">
-            {{ letter }}
-        </button>
-
-        {% endfor %}
-
-    </div>
-
-    <div id="imageArea">
-
-        <div class="message">
-            <h2>Select a letter</h2>
-            <p>Choose A–Z to see the sign.</p>
-        </div>
-
-    </div>
-
-    <button
-        class="button back-button"
-        onclick="location.href='/'">
-        ← BACK
-    </button>
-
-</div>
-
-<script>
-async function showLetter(letter) {
-
-    const area =
-        document.getElementById("imageArea");
-
-    area.innerHTML =
-        "<div class='message'>" +
-        "<h2>Loading " +
-        letter +
-        "...</h2>" +
-        "</div>";
-
-    try {
-
-        const response =
-            await fetch(
-                "/learning_image/" + letter
+        const image =
+            canvas.toDataURL(
+                "image/jpeg",
+                0.75
             );
 
-        const data =
-            await response.json();
 
-        if (!data.image) {
+        const response = await fetch(
+            "/predict",
+            {
 
-            area.innerHTML =
-                "<div class='message'>" +
-                "<h2>No image found</h2>" +
-                "</div>";
+                method: "POST",
 
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    image: image
+                })
+
+            }
+        );
+
+
+        if (!response.ok) {
+
+            document.getElementById("status").textContent =
+                "Prediction server error.";
+
+            return;
+
+        }
+
+
+        const data = await response.json();
+
+
+        drawLandmarks(data.hands || []);
+
+
+        if (
+            !data.hands ||
+            data.hands.length === 0
+        ) {
+
+            noHandCount++;
+
+
+            if (noHandCount >= 4) {
+
+                stableLetter = "";
+
+                stableCount = 0;
+
+                lastSpokenLetter = "";
+
+                document.getElementById("letter").textContent =
+                    "—";
+
+            }
+
+
+            document.getElementById("status").textContent =
+                "No hand detected";
+
+
+            return;
+
+        }
+
+
+        noHandCount = 0;
+
+
+        let best = data.hands[0];
+
+
+        for (const hand of data.hands) {
+
+            if (
+                (hand.confidence || 0) >
+                (best.confidence || 0)
+            ) {
+
+                best = hand;
+
+            }
+
+        }
+
+
+        const predictedLetter = best.letter;
+
+
+        if (!predictedLetter) {
             return;
         }
 
-        area.innerHTML =
-            "<div class='learning-title'>" +
-            "ISL Sign – " +
-            letter +
-            "</div>" +
 
-            "<div class='learning-image'>" +
+        if (
+            predictedLetter === stableLetter
+        ) {
 
-            "<img src='" +
-            data.image +
-            "' alt='ISL " +
-            letter +
-            "'>" +
+            stableCount++;
 
-            "</div>";
+        } else {
+
+            stableLetter = predictedLetter;
+
+            stableCount = 1;
+
+        }
+
+
+        document.getElementById("status").textContent =
+            "Detecting: " + predictedLetter;
+
+
+        if (stableCount >= 4) {
+
+            document.getElementById("letter").textContent =
+                predictedLetter;
+
+
+            if (
+                lastSpokenLetter !== predictedLetter
+            ) {
+
+                speakLetter(predictedLetter);
+
+                lastSpokenLetter = predictedLetter;
+
+            }
+
+        }
+
 
     } catch (error) {
 
         console.error(error);
 
-        area.innerHTML =
-            "<div class='message'>" +
-            "<h2>Error loading image</h2>" +
-            "</div>";
+        document.getElementById("status").textContent =
+            "Connection problem. Trying again...";
+
+    } finally {
+
+        processing = false;
+
     }
+
 }
+
+
+function drawLandmarks(allHands) {
+
+    ctx.clearRect(
+        0,
+        0,
+        overlay.width,
+        overlay.height
+    );
+
+
+    if (
+        !allHands ||
+        allHands.length === 0
+    ) {
+
+        return;
+
+    }
+
+
+    ctx.lineWidth = 3;
+
+    ctx.strokeStyle = "#00ff66";
+
+    ctx.fillStyle = "#ff3333";
+
+
+    for (const hand of allHands) {
+
+        const landmarks = hand.landmarks || [];
+
+
+        for (const connection of hand.connections || []) {
+
+            const a = landmarks[connection[0]];
+
+            const b = landmarks[connection[1]];
+
+
+            if (!a || !b) {
+                continue;
+            }
+
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                a.x * overlay.width,
+                a.y * overlay.height
+            );
+
+            ctx.lineTo(
+                b.x * overlay.width,
+                b.y * overlay.height
+            );
+
+            ctx.stroke();
+
+        }
+
+
+        for (const point of landmarks) {
+
+            ctx.beginPath();
+
+            ctx.arc(
+                point.x * overlay.width,
+                point.y * overlay.height,
+                5,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fill();
+
+        }
+
+    }
+
+}
+
+
+function speakLetter(letter) {
+
+    if (!("speechSynthesis" in window)) {
+        return;
+    }
+
+
+    window.speechSynthesis.cancel();
+
+
+    const utterance =
+        new SpeechSynthesisUtterance(letter);
+
+
+    utterance.rate = 0.8;
+
+    utterance.pitch = 1.0;
+
+    utterance.volume = 1.0;
+
+
+    window.speechSynthesis.speak(utterance);
+
+}
+
+
+buildLetterButtons();
+
 </script>
 
 </body>
 </html>
 """
 
-# ============================================================
-# EXIT PAGE
-# ============================================================
-
-EXIT_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Exit</title>
-    {{ style|safe }}
-</head>
-
-<body>
-
-<div class="header">ISL VISION</div>
-
-<div class="container">
-
-    <div class="message">
-
-        <h1>Thank You!</h1>
-
-        <p>You can now close this browser tab.</p>
-
-        <button
-            class="button"
-            onclick="window.close()">
-            CLOSE
-        </button>
-
-    </div>
-
-</div>
-
-</body>
-</html>
-"""
-
-# ============================================================
-# ROUTES
-# ============================================================
 
 @app.route("/")
 def home():
-    return render_template_string(
-        HOME_PAGE,
-        style=STYLE
-    )
+
+    return render_template_string(HTML)
 
 
-@app.route("/recognize")
-def recognize():
-    return render_template_string(
-        RECOGNITION_PAGE,
-        style=STYLE
-    )
+@app.route("/learning/<letter>")
+def learning(letter):
+
+    letter = letter.upper()
 
 
-@app.route("/learning")
-def learning():
+    if (
+        len(letter) != 1 or
+        letter not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ):
 
-    letters = list(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    )
-
-    return render_template_string(
-        LEARNING_PAGE,
-        style=STYLE,
-        letters=letters
-    )
+        return "Invalid letter", 404
 
 
-@app.route("/exit")
-def exit_page():
-    return render_template_string(
-        EXIT_PAGE,
-        style=STYLE
-    )
+    image_file = f"{letter}.jpg"
+
+    full_path = LEARNING_DIR / image_file
 
 
-# ============================================================
-# DATASET FOLDER
-# ============================================================
+    if not full_path.exists():
 
-def find_letter_folder(letter):
-
-    if not DATASET_DIR.exists():
-        return None
-
-    for folder in DATASET_DIR.iterdir():
-
-        if (
-            folder.is_dir()
-            and folder.name.lower()
-            == letter.lower()
-        ):
-            return folder
-
-    return None
-
-
-# ============================================================
-# ONE LEARNING IMAGE
-# ============================================================
-
-@app.route("/learning_image/<letter>")
-def learning_image(letter):
-
-    folder = find_letter_folder(letter)
-
-    if folder is None:
-        return jsonify({"image": None})
-
-    image_files = []
-
-    for file in folder.iterdir():
-
-        if (
-            file.is_file()
-            and file.suffix.lower()
-            in (
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".bmp",
-                ".webp"
-            )
-        ):
-            image_files.append(file)
-
-    image_files.sort(
-        key=lambda x: x.name.lower()
-    )
-
-    if not image_files:
-        return jsonify({"image": None})
-
-    image_file = image_files[0]
-
-    return jsonify({
-        "image":
-            "/dataset_image/"
-            + folder.name
-            + "/"
-            + image_file.name
-    })
-
-
-# ============================================================
-# SERVE DATASET IMAGE
-# ============================================================
-
-@app.route("/dataset_image/<letter>/<filename>")
-def dataset_image(letter, filename):
-
-    folder = find_letter_folder(letter)
-
-    if folder is None:
-        return "Folder not found", 404
-
-    file_path = folder / filename
-
-    if not file_path.exists():
         return "Image not found", 404
 
+
     return send_from_directory(
-        str(folder),
-        filename
+        LEARNING_DIR,
+        image_file
     )
 
-
-# ============================================================
-# PREDICTION
-# ============================================================
 
 @app.route("/predict", methods=["POST"])
 def predict():
 
     try:
 
-        data = request.get_json()
+        payload = request.get_json(
+            silent=True
+        )
+
 
         if (
-            not data
-            or "image" not in data
+            not payload or
+            "image" not in payload
         ):
+
             return jsonify({
-                "predictions": [],
-                "hands": []
-            })
+                "hands": [],
+                "error": "No image received"
+            }), 400
 
 
-        image_data = data["image"]
+        image_data = payload["image"]
+
 
         if "," in image_data:
 
-            image_data = image_data.split(",", 1)[1]
+            image_data = image_data.split(
+                ",",
+                1
+            )[1]
 
 
-        image_bytes = base64.b64decode(image_data)
+        image_bytes = base64.b64decode(
+            image_data
+        )
 
 
-        image_array = np.frombuffer(
-                image_bytes,
-                dtype=np.uint8
-            )
+        np_arr = np.frombuffer(
+            image_bytes,
+            np.uint8
+        )
 
 
         image = cv2.imdecode(
-                image_array,
-                cv2.IMREAD_COLOR
-            )
+            np_arr,
+            cv2.IMREAD_COLOR
+        )
 
 
         if image is None:
 
             return jsonify({
-                "predictions": [],
-                "hands": []
-            })
+                "hands": [],
+                "error": "Could not decode image"
+            }), 400
 
 
-        # ----------------------------------------------------
-        # BGR TO RGB
-        # ----------------------------------------------------
-
-        rgb = cv2.cvtColor(
-                image,
-                cv2.COLOR_BGR2RGB
-            )
+        rgb_image = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2RGB
+        )
 
 
-        # ----------------------------------------------------
-        # MEDIAPIPE
-        # ----------------------------------------------------
-
-        results = hands.process(rgb)
+        results = hands.process(
+            rgb_image
+        )
 
 
         if not results.multi_hand_landmarks:
 
             return jsonify({
-                "predictions": [],
                 "hands": []
             })
 
 
-        all_hands = []
-        predictions = []
+        response_hands = []
 
 
-        # ----------------------------------------------------
-        # PROCESS EACH REAL HAND
-        # ----------------------------------------------------
-
-        for hand_landmarks in \
-            results.multi_hand_landmarks:
-
-
-            # ------------------------------------------------
-            # LANDMARK POINTS
-            # ------------------------------------------------
-
-            points = []
-
-            for landmark in \
-                hand_landmarks.landmark:
-
-                points.append({
-
-                    "x":
-                        float(landmark.x),
-
-                    "y":
-                        float(landmark.y),
-
-                    "z":
-                        float(landmark.z)
-
-                })
-
-
-            # ------------------------------------------------
-            # CONNECTIONS
-            # ------------------------------------------------
-
-            connections = []
-
-            for connection in \
-                mp_hands.HAND_CONNECTIONS:
-
-                connections.append([
-
-                    int(connection[0]),
-
-                    int(connection[1])
-
-                ])
-
-
-            all_hands.append({
-
-                "points":
-                    points,
-
-                "connections":
-                    connections
-
-            })
-
-
-            # ------------------------------------------------
-            # SAME 63 FEATURES USED DURING TRAINING
-            # ------------------------------------------------
+        for hand_landmarks in results.multi_hand_landmarks:
 
             wrist = hand_landmarks.landmark[0]
 
-
             features = []
 
-            for landmark in \
-                hand_landmarks.landmark:
+
+            for landmark in hand_landmarks.landmark:
 
                 x = landmark.x - wrist.x
 
                 y = landmark.y - wrist.y
 
                 z = landmark.z - wrist.z
-
 
                 features.extend([
                     x,
@@ -1224,36 +1113,75 @@ def predict():
                 ])
 
 
-            feature_array = np.array(
-                    features,
-                    dtype=np.float32
-                ).reshape(
-                    1,
-                    -1
-                )
-
-
-            # ------------------------------------------------
-            # PREDICTION
-            # ------------------------------------------------
-
-            prediction = model.predict(
-                    feature_array
-                )[0]
-
-
-            predictions.append(
-                str(prediction)
+            features_array = np.array(
+                features,
+                dtype=np.float32
+            ).reshape(
+                1,
+                -1
             )
 
 
+            prediction = model.predict(
+                features_array
+            )[0]
+
+
+            confidence = 0.0
+
+
+            if hasattr(
+                model,
+                "predict_proba"
+            ):
+
+                probabilities = model.predict_proba(
+                    features_array
+                )[0]
+
+                confidence = float(
+                    np.max(probabilities)
+                )
+
+
+            landmark_list = []
+
+
+            for point in hand_landmarks.landmark:
+
+                landmark_list.append({
+                    "x": float(point.x),
+                    "y": float(point.y),
+                    "z": float(point.z)
+                })
+
+
+            connections = []
+
+
+            for connection in mp_hands.HAND_CONNECTIONS:
+
+                connections.append([
+                    int(connection[0]),
+                    int(connection[1])
+                ])
+
+
+            response_hands.append({
+
+                "letter": str(prediction),
+
+                "confidence": confidence,
+
+                "landmarks": landmark_list,
+
+                "connections": connections
+
+            })
+
+
         return jsonify({
-
-            "predictions":
-                predictions,
-
-            "hands":
-                all_hands
+            "hands": response_hands
         })
 
 
@@ -1261,64 +1189,23 @@ def predict():
 
         print(
             "Prediction error:",
-            error
+            repr(error)
         )
+
 
         return jsonify({
 
-            "predictions": [],
-
             "hands": [],
 
-            "error":
-                str(error)
-        })
+            "error": str(error)
 
+        }), 500
 
-# ============================================================
-# RUN APPLICATION
-# ============================================================
 
 if __name__ == "__main__":
 
-    port = int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        )
-
-    print()
-    print(
-        "=========================================="
-    )
-    print(
-        "              ISL VISION"
-    )
-    print(
-        "=========================================="
-    )
-    print(
-        "A-Z recognition"
-    )
-    print(
-        "1 or 2 hand detection"
-    )
-    print(
-        f"Model: {MODEL_FILE}"
-    )
-    print(
-        f"Dataset: {DATASET_DIR}"
-    )
-    print(
-        f"Port: {port}"
-    )
-    print(
-        "=========================================="
-    )
-
     app.run(
         host="0.0.0.0",
-        port=port,
+        port=5000,
         debug=False
     )
