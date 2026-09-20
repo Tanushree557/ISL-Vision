@@ -1,8 +1,8 @@
+@"
 .venv/
+web_env/
 __pycache__/
 *.pyc
-
-member1_letters/dataset/
-member2_words/dataset/
-
 .vscode/
+member1_letters/dataset/
+"@ | Set-Content .gitignore
