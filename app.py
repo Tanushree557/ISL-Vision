@@ -129,7 +129,7 @@ except Exception as e:
 # MEDIAPIPE
 # ============================================================
 
-from mediapipe.python.solutions import hands as mp_hands
+mp_hands = mp.solutions.hands
 hands_detector = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=2,
