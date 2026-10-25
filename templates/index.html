@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>ISL Vision</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="app-container">
+
+    <header class="main-header">
+        <div>
+            <h1>ISL VISION</h1>
+            <p>Indian Sign Language Recognition System</p>
+        </div>
+    </header>
+
+
+    <main class="home-content">
+
+        <div class="welcome-card">
+            <h2>Welcome to ISL Vision</h2>
+
+            <p>
+                Learn Indian Sign Language, recognize letters and words,
+                and convert recognized signs into meaningful sentences
+                with speech output.
+            </p>
+        </div>
+
+
+        <div class="module-grid">
+
+            <a href="/letter-learning" class="module-card">
+                <div class="module-icon">🔤</div>
+                <h3>Learn ISL Letters</h3>
+                <p>Learn A-Z Indian Sign Language letters.</p>
+                <span>OPEN →</span>
+            </a>
+
+
+            <a href="/letter-recognition" class="module-card">
+                <div class="module-icon">✋</div>
+                <h3>Recognize ISL Letters</h3>
+                <p>Show a hand sign and recognize the letter.</p>
+                <span>OPEN →</span>
+            </a>
+
+
+            <a href="/word-learning" class="module-card">
+                <div class="module-icon">📚</div>
+                <h3>Learn ISL Words</h3>
+                <p>Learn the 23 supported ISL words.</p>
+                <span>OPEN →</span>
+            </a>
+
+
+            <a href="/word-recognition" class="module-card">
+                <div class="module-icon">🖐️</div>
+                <h3>Recognize ISL Words</h3>
+                <p>Recognize ISL words using the camera.</p>
+                <span>OPEN →</span>
+            </a>
+
+
+            <a href="/sentence-recognition"
+               class="module-card sentence-card">
+
+                <div class="module-icon">💬</div>
+
+                <h3>Sentence Recognition</h3>
+
+                <p>
+                    Recognize words, choose a meaningful sentence,
+                    and hear it as speech.
+                </p>
+
+                <span>OPEN →</span>
+            </a>
+            <a href="/speech-to-text" class="module-card">
+                <div class="module-icon">🎤</div>
+                    <h3>Speech-to-Text</h3>
+                    <p>Speak into the microphone and convert your speech into text.</p>
+                <span>OPEN →</span>
+            </a>
+        </div>
+
+    </main>
+
+
+    <footer>
+        <p>AI-Based Indian Sign Language Recognition</p>
+    </footer>
+
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>

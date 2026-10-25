@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>ISL Vision - Letter Recognition</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #f3f7fb;
+            color: #222;
+        }
+
+        .header {
+            background: #1565c0;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .header p {
+            margin: 7px 0 0;
+            font-size: 15px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 25px auto;
+            padding: 0 20px;
+        }
+
+        .camera-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.10);
+        }
+
+        .camera-box {
+            width: 100%;
+            background: #111;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            background: #111;
+
+            /* Mirror only the displayed camera */
+            transform: scaleX(-1);
+        }
+
+        .result-box {
+            margin-top: 20px;
+            padding: 25px;
+            border-radius: 12px;
+            background: #e3f2fd;
+            text-align: center;
+        }
+
+        .result-title {
+            font-size: 18px;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .letter {
+            font-size: 80px;
+            font-weight: bold;
+            color: #1565c0;
+            min-height: 95px;
+        }
+
+        .confidence {
+            font-size: 16px;
+            color: #444;
+            margin-top: 5px;
+        }
+
+        .status {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 15px;
+            color: #555;
+        }
+
+        .voice-status {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: #2e7d32;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 13px 22px;
+            font-size: 16px;
+            cursor: pointer;
+            color: white;
+        }
+
+        #startBtn {
+            background: #2e7d32;
+        }
+
+        #stopBtn {
+            background: #c62828;
+        }
+
+        #clearBtn {
+            background: #546e7a;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .info {
+            margin-top: 20px;
+            background: #fff8e1;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 600px) {
+
+            .header h1 {
+                font-size: 23px;
+            }
+
+            .letter {
+                font-size: 65px;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .buttons {
+                flex-direction: column;
+            }
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
+    <div class="header">
+
+        <h1>
+            ISL Vision
+        </h1>
+
+        <p>
+            Indian Sign Language Letter Recognition
+        </p>
+
+    </div>
+
+
+    <!-- =====================================================
+         MAIN CONTAINER
+    ====================================================== -->
+
+    <div class="container">
+
+        <div class="camera-card">
+
+
+            <!-- =================================================
+                 CAMERA
+            ================================================== -->
+
+            <div class="camera-box">
+
+                <video
+                    id="video"
+                    autoplay
+                    playsinline>
+                </video>
+
+            </div>
+
+
+            <!-- =================================================
+                 RECOGNITION RESULT
+            ================================================== -->
+
+            <div class="result-box">
+
+                <div class="result-title">
+                    Confirmed Letter
+                </div>
+
+                <div
+                    id="letter"
+                    class="letter">
+                    -
+                </div>
+
+                <div
+                    id="confidence"
+                    class="confidence">
+                    Confidence: -
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 STATUS
+            ================================================== -->
+
+            <div
+                id="status"
+                class="status">
+
+                Camera is stopped.
+
+            </div>
+
+
+            <!-- =================================================
+                 VOICE STATUS
+            ================================================== -->
+
+            <div
+                id="voiceStatus"
+                class="voice-status">
+
+                Automatic voice: Ready
+
+            </div>
+
+
+            <!-- =================================================
+                 BUTTONS
+            ================================================== -->
+
+            <div class="buttons">
+
+                <button
+                    id="startBtn">
+
+                    START CAMERA
+
+                </button>
+
+
+                <button
+                    id="stopBtn"
+                    disabled>
+
+                    STOP CAMERA
+
+                </button>
+
+
+                <button
+                    id="clearBtn">
+
+                    CLEAR
+
+                </button>
+
+            </div>
+
+
+            <!-- =================================================
+                 INFORMATION
+            ================================================== -->
+
+            <div class="info">
+
+                <b>How it works:</b>
+
+                <br>
+
+                1. Click <b>START CAMERA</b>.
+
+                <br>
+
+                2. Show an ISL letter.
+
+                <br>
+
+                3. The system checks the prediction
+                   continuously.
+
+                <br>
+
+                4. After the same letter is detected
+                   for 5 consecutive frames, it is confirmed.
+
+                <br>
+
+                5. The confirmed letter is displayed.
+
+                <br>
+
+                6. The letter is automatically spoken
+                   <b>only once</b>.
+
+                <br>
+
+                7. The same letter will NOT be spoken again
+                   until a different letter is confirmed.
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+
+
+    <script>
+
+
+        /* =====================================================
+           HTML ELEMENTS
+        ====================================================== */
+
+        const video =
+            document.getElementById("video");
+
+
+        const letterDisplay =
+            document.getElementById("letter");
+
+
+        const confidenceDisplay =
+            document.getElementById("confidence");
+
+
+        const statusDisplay =
+            document.getElementById("status");
+
+
+        const voiceStatus =
+            document.getElementById("voiceStatus");
+
+
+        const startBtn =
+            document.getElementById("startBtn");
+
+
+        const stopBtn =
+            document.getElementById("stopBtn");
+
+
+        const clearBtn =
+            document.getElementById("clearBtn");
+
+
+
+        /* =====================================================
+           CAMERA VARIABLES
+        ====================================================== */
+
+        let stream = null;
+
+        let recognitionRunning = false;
+
+        let recognitionTimer = null;
+
+
+
+        /* =====================================================
+           LETTER CONFIRMATION VARIABLES
+        ====================================================== */
+
+        /*
+           The letter must be detected this many
+           consecutive times before it is confirmed.
+        */
+
+        const REQUIRED_CONFIRMATIONS = 5;
+
+
+        /*
+           Currently being checked letter.
+        */
+
+        let pendingLetter = "";
+
+
+        /*
+           Number of consecutive predictions
+           for pendingLetter.
+        */
+
+        let pendingCount = 0;
+
+
+        /*
+           Last letter that was actually confirmed
+           and spoken.
+        */
+
+        let lastConfirmedLetter = "";
+
+
+
+        /* =====================================================
+           SPEECH SUPPORT
+        ====================================================== */
+
+        function checkVoiceSupport() {
+
+            if ("speechSynthesis" in window) {
+
+                voiceStatus.textContent =
+                    "Automatic voice: Ready";
+
+                voiceStatus.style.color =
+                    "#2e7d32";
+
+                return true;
+
+            }
+
+            else {
+
+                voiceStatus.textContent =
+                    "Automatic voice is not supported.";
+
+                voiceStatus.style.color =
+                    "#c62828";
+
+                return false;
+            }
+
+        }
+
+
+
+        /* =====================================================
+           SPEAK CONFIRMED LETTER
+        ====================================================== */
+
+        function speakLetter(letter) {
+
+            if (!letter) {
+                return;
+            }
+
+
+            if (!("speechSynthesis" in window)) {
+
+                return;
+            }
+
+
+            /*
+               Cancel anything that might still be speaking.
+            */
+
+            window.speechSynthesis.cancel();
+
+
+            /*
+               Create speech object.
+            */
+
+            const speech =
+                new SpeechSynthesisUtterance(letter);
+
+
+            /*
+               Indian English.
+            */
+
+            speech.lang = "en-IN";
+
+
+            /*
+               Speech speed.
+            */
+
+            speech.rate = 0.8;
+
+
+            /*
+               Normal pitch.
+            */
+
+            speech.pitch = 1.0;
+
+
+            /*
+               Full volume.
+            */
+
+            speech.volume = 1.0;
+
+
+            /*
+               Voice started.
+            */
+
+            speech.onstart = function() {
+
+                voiceStatus.textContent =
+                    "🔊 Speaking: " + letter;
+
+            };
+
+
+            /*
+               Voice finished.
+            */
+
+            speech.onend = function() {
+
+                voiceStatus.textContent =
+                    "Automatic voice: Ready";
+
+            };
+
+
+            /*
+               Voice error.
+            */
+
+            speech.onerror = function(event) {
+
+                console.log(
+                    "Speech error:",
+                    event
+                );
+
+                voiceStatus.textContent =
+                    "Automatic voice error.";
+
+            };
+
+
+            /*
+               Speak.
+            */
+
+            window.speechSynthesis.speak(
+                speech
+            );
+
+        }
+
+
+
+        /* =====================================================
+           PROCESS LETTER PREDICTION
+        ====================================================== */
+
+        function processRecognizedLetter(
+            detectedLetter,
+            confidence
+        ) {
+
+            if (!detectedLetter) {
+                return;
+            }
+
+
+            /*
+               Convert to uppercase.
+            */
+
+            const letter =
+                String(
+                    detectedLetter
+                ).toUpperCase();
+
+
+            /* -----------------------------------------------
+               If this is the same pending letter,
+               increase confirmation count.
+            ------------------------------------------------ */
+
+            if (letter === pendingLetter) {
+
+                pendingCount++;
+
+            }
+
+            else {
+
+                /*
+                   A different letter has appeared.
+                   Start confirmation again.
+                */
+
+                pendingLetter = letter;
+
+                pendingCount = 1;
+
+            }
+
+
+            /*
+               Show current confidence.
+            */
+
+            if (
+                confidence !== undefined &&
+                confidence !== null
+            ) {
+
+                confidenceDisplay.textContent =
+                    "Confidence: " +
+                    (
+                        Number(confidence) * 100
+                    ).toFixed(1) +
+                    "%";
+
+            }
+
+
+            /*
+               Show confirmation progress.
+            */
+
+            statusDisplay.textContent =
+                "Checking letter " +
+                letter +
+                " (" +
+                pendingCount +
+                "/" +
+                REQUIRED_CONFIRMATIONS +
+                ")";
+
+
+            /* =================================================
+               CONFIRM LETTER
+            ================================================= */
+
+            if (
+                pendingCount >=
+                REQUIRED_CONFIRMATIONS
+            ) {
+
+
+                /*
+                   IMPORTANT:
+
+                   Only confirm and speak if this is
+                   a DIFFERENT letter from the previous
+                   confirmed letter.
+                */
+
+                if (
+                    letter !==
+                    lastConfirmedLetter
+                ) {
+
+
+                    /*
+                       Save as confirmed letter.
+                    */
+
+                    lastConfirmedLetter =
+                        letter;
+
+
+                    /*
+                       Display confirmed letter.
+                    */
+
+                    letterDisplay.textContent =
+                        letter;
+
+
+                    /*
+                       Update status.
+                    */
+
+                    statusDisplay.textContent =
+                        "Confirmed: " +
+                        letter;
+
+
+                    /*
+                       AUTOMATIC VOICE
+
+                       This runs ONLY ONCE for this
+                       newly confirmed letter.
+                    */
+
+                    speakLetter(letter);
+
+                }
+
+                else {
+
+                    /*
+                       Same confirmed letter is still
+                       being shown.
+
+                       DO NOT SPEAK AGAIN.
+                    */
+
+                    letterDisplay.textContent =
+                        letter;
+
+                    statusDisplay.textContent =
+                        "Confirmed: " +
+                        letter;
+
+                }
+
+            }
+
+        }
+
+
+
+        /* =====================================================
+           START CAMERA
+        ====================================================== */
+
+        async function startCamera() {
+
+            try {
+
+
+                /*
+                   Initialize browser speech after
+                   user clicks START CAMERA.
+
+                   This helps browsers that restrict
+                   automatic speech until user interaction.
+                */
+
+                if (
+                    "speechSynthesis"
+                    in window
+                ) {
+
+                    window.speechSynthesis.cancel();
+
+                    window.speechSynthesis.getVoices();
+
+                }
+
+
+                /*
+                   Request camera.
+                */
+
+                stream =
+                    await navigator.mediaDevices
+                    .getUserMedia({
+
+                        video: {
+
+                            facingMode: "user",
+
+                            width: {
+                                ideal: 1280
+                            },
+
+                            height: {
+                                ideal: 720
+                            }
+
+                        },
+
+                        audio: false
+
+                    });
+
+
+                /*
+                   Attach camera stream.
+                */
+
+                video.srcObject =
+                    stream;
+
+
+                /*
+                   Camera running.
+                */
+
+                recognitionRunning =
+                    true;
+
+
+                /*
+                   Reset confirmation state
+                   when camera starts.
+                */
+
+                pendingLetter = "";
+
+                pendingCount = 0;
+
+                lastConfirmedLetter = "";
+
+
+                /*
+                   Reset display.
+                */
+
+                letterDisplay.textContent =
+                    "-";
+
+                confidenceDisplay.textContent =
+                    "Confidence: -";
+
+
+                /*
+                   Update buttons.
+                */
+
+                startBtn.disabled =
+                    true;
+
+                stopBtn.disabled =
+                    false;
+
+
+                /*
+                   Status.
+                */
+
+                statusDisplay.textContent =
+                    "Camera started. Show an ISL letter.";
+
+
+                /*
+                   Start recognition.
+
+                   Every 300 milliseconds.
+                */
+
+                recognitionTimer =
+                    setInterval(
+                        recognizeLetter,
+                        300
+                    );
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                statusDisplay.textContent =
+                    "Camera error: " +
+                    error.message;
+
+
+                alert(
+                    "Unable to access camera. Please allow camera permission."
+                );
+
+            }
+
+        }
+
+
+
+        /* =====================================================
+           STOP CAMERA
+        ====================================================== */
+
+        function stopCamera() {
+
+
+            /*
+               Stop recognition.
+            */
+
+            recognitionRunning =
+                false;
+
+
+            /*
+               Stop timer.
+            */
+
+            if (recognitionTimer) {
+
+                clearInterval(
+                    recognitionTimer
+                );
+
+                recognitionTimer =
+                    null;
+
+            }
+
+
+            /*
+               Stop camera tracks.
+            */
+
+            if (stream) {
+
+                stream
+                    .getTracks()
+                    .forEach(
+                        track =>
+                            track.stop()
+                    );
+
+                stream =
+                    null;
+
+            }
+
+
+            /*
+               Remove camera.
+            */
+
+            video.srcObject =
+                null;
+
+
+            /*
+               Update buttons.
+            */
+
+            startBtn.disabled =
+                false;
+
+            stopBtn.disabled =
+                true;
+
+
+            /*
+               Stop voice.
+            */
+
+            if (
+                "speechSynthesis"
+                in window
+            ) {
+
+                window.speechSynthesis.cancel();
+
+            }
+
+
+            /*
+               Reset confirmation state.
+            */
+
+            pendingLetter = "";
+
+            pendingCount = 0;
+
+            lastConfirmedLetter = "";
+
+
+            /*
+               Status.
+            */
+
+            statusDisplay.textContent =
+                "Camera is stopped.";
+
+
+            voiceStatus.textContent =
+                "Automatic voice: Ready";
+
+        }
+
+
+
+        /* =====================================================
+           RECOGNIZE LETTER
+        ====================================================== */
+
+        async function recognizeLetter() {
+
+
+            /*
+               Camera must be running.
+            */
+
+            if (!recognitionRunning) {
+                return;
+            }
+
+
+            /*
+               Video must have dimensions.
+            */
+
+            if (
+                !video.videoWidth ||
+                !video.videoHeight
+            ) {
+
+                return;
+
+            }
+
+
+            /*
+               Create canvas.
+            */
+
+            const canvas =
+                document.createElement(
+                    "canvas"
+                );
+
+
+            canvas.width =
+                video.videoWidth;
+
+            canvas.height =
+                video.videoHeight;
+
+
+            const ctx =
+                canvas.getContext(
+                    "2d"
+                );
+
+
+            /*
+               IMPORTANT:
+
+               Do NOT flip the image sent
+               to the Flask server.
+
+               The video itself is mirrored
+               only for the user's display.
+            */
+
+            ctx.drawImage(
+
+                video,
+
+                0,
+                0,
+
+                canvas.width,
+                canvas.height
+
+            );
+
+
+            /*
+               Convert image to JPEG.
+            */
+
+            const image =
+                canvas.toDataURL(
+                    "image/jpeg",
+                    0.85
+                );
+
+
+            try {
+
+
+                /*
+                   Send image to Flask.
+                */
+
+                const response =
+                    await fetch(
+
+                        "/api/letter_predict",
+
+                        {
+
+                            method:
+                                "POST",
+
+                            headers: {
+
+                                "Content-Type":
+                                    "application/json"
+
+                            },
+
+                            body:
+                                JSON.stringify({
+
+                                    image:
+                                        image
+
+                                })
+
+                        }
+
+                    );
+
+
+                /*
+                   Read server response.
+                */
+
+                const data =
+                    await response.json();
+
+
+
+                /* =================================================
+                   NO HAND
+                ================================================== */
+
+                if (
+                    !data.hand_detected
+                ) {
+
+
+                    /*
+                       Do NOT immediately erase
+                       the confirmed letter.
+
+                       This prevents temporary detection
+                       gaps from causing another voice.
+                    */
+
+                    statusDisplay.textContent =
+                        "Show your hand clearly to the camera.";
+
+
+                    /*
+                       Reset pending detection only.
+                    */
+
+                    pendingLetter = "";
+
+                    pendingCount = 0;
+
+
+                    return;
+
+                }
+
+
+
+                /* =================================================
+                   SUCCESSFUL PREDICTION
+                ================================================== */
+
+                if (
+                    data.success &&
+                    data.letter
+                ) {
+
+
+                    processRecognizedLetter(
+
+                        data.letter,
+
+                        data.confidence
+
+                    );
+
+                }
+
+
+                /* =================================================
+                   SERVER ERROR
+                ================================================== */
+
+                else if (
+                    data.error
+                ) {
+
+                    statusDisplay.textContent =
+                        data.error;
+
+                }
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Recognition error:",
+                    error
+                );
+
+
+                statusDisplay.textContent =
+                    "Recognition connection error.";
+
+            }
+
+        }
+
+
+
+        /* =====================================================
+           CLEAR RESULT
+        ====================================================== */
+
+        function clearResult() {
+
+
+            /*
+               Clear displayed letter.
+            */
+
+            letterDisplay.textContent =
+                "-";
+
+
+            confidenceDisplay.textContent =
+                "Confidence: -";
+
+
+            /*
+               Reset confirmation.
+            */
+
+            pendingLetter = "";
+
+            pendingCount = 0;
+
+            lastConfirmedLetter = "";
+
+
+            /*
+               Stop any speech.
+            */
+
+            if (
+                "speechSynthesis"
+                in window
+            ) {
+
+                window.speechSynthesis.cancel();
+
+            }
+
+
+            /*
+               Status.
+            */
+
+            if (recognitionRunning) {
+
+                statusDisplay.textContent =
+                    "Show an ISL letter to the camera.";
+
+            }
+
+            else {
+
+                statusDisplay.textContent =
+                    "Camera is stopped.";
+
+            }
+
+
+            voiceStatus.textContent =
+                "Automatic voice: Ready";
+
+        }
+
+
+
+        /* =====================================================
+           BUTTON EVENTS
+        ====================================================== */
+
+        startBtn.addEventListener(
+            "click",
+            startCamera
+        );
+
+
+        stopBtn.addEventListener(
+            "click",
+            stopCamera
+        );
+
+
+        clearBtn.addEventListener(
+            "click",
+            clearResult
+        );
+
+
+
+        /* =====================================================
+           CHECK VOICE WHEN PAGE LOADS
+        ====================================================== */
+
+        checkVoiceSupport();
+
+
+
+        /* =====================================================
+           LOAD AVAILABLE VOICES
+        ====================================================== */
+
+        if (
+            "speechSynthesis"
+            in window
+        ) {
+
+            window.speechSynthesis
+                .onvoiceschanged =
+                function() {
+
+                    window.speechSynthesis
+                        .getVoices();
+
+                };
+
+        }
+
+
+
+        /* =====================================================
+           STOP EVERYTHING WHEN PAGE CLOSES
+        ====================================================== */
+
+        window.addEventListener(
+            "beforeunload",
+            function() {
+
+                stopCamera();
+
+            }
+        );
+
+
+    </script>
+
+</body>
+
+</html>

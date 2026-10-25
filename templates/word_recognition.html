@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>Recognize ISL Words</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef5ff, #ffffff);
+    color: #172033;
+}
+
+.header {
+    background: #1769e0;
+    color: white;
+    text-align: center;
+    padding: 18px;
+}
+
+.header h1 {
+    margin: 0;
+}
+
+.container {
+    width: 95%;
+    max-width: 900px;
+    margin: 25px auto;
+}
+
+.camera-box {
+    background: white;
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+    text-align: center;
+}
+
+video {
+    width: 100%;
+    max-width: 720px;
+    border-radius: 15px;
+    background: black;
+    transform: scaleX(-1);
+}
+
+.status {
+    margin-top: 15px;
+    font-weight: bold;
+}
+
+.result {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 15px;
+    background: #f1f6ff;
+}
+
+.word {
+    font-size: 42px;
+    font-weight: bold;
+    color: #1769e0;
+}
+
+.confidence {
+    margin-top: 8px;
+}
+
+.frames {
+    margin-top: 5px;
+    color: #555;
+}
+
+button {
+    border: none;
+    padding: 13px 22px;
+    margin: 8px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.start {
+    background: #1769e0;
+    color: white;
+}
+
+.stop {
+    background: #e53935;
+    color: white;
+}
+
+.back {
+    background: #555;
+    color: white;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h1>ISL Word Recognition</h1>
+</div>
+
+<div class="container">
+
+<div class="camera-box">
+
+<video id="camera"
+       autoplay
+       playsinline></video>
+
+<div>
+
+<button class="start"
+        onclick="startRecognition()">
+START RECOGNITION
+</button>
+
+<button class="stop"
+        onclick="stopRecognition()">
+STOP
+</button>
+
+<button class="back"
+        onclick="location.href='/'">
+BACK
+</button>
+
+</div>
+
+<div class="status"
+     id="status">
+Camera stopped
+</div>
+
+<div class="result">
+
+<div>Detected Word</div>
+
+<div class="word"
+     id="word">
+—
+</div>
+
+<div class="confidence"
+     id="confidence">
+Confidence: —
+</div>
+
+<div class="frames"
+     id="frames">
+Frames: 0 / 16
+</div>
+
+</div>
+
+<p>
+Show one of the trained ISL words clearly to the camera.
+</p>
+
+</div>
+
+</div>
+
+<script>
+
+let stream = null;
+let timer = null;
+let busy = false;
+let sessionId = null;
+
+const video =
+    document.getElementById("camera");
+
+const wordBox =
+    document.getElementById("word");
+
+const confidenceBox =
+    document.getElementById("confidence");
+
+const framesBox =
+    document.getElementById("frames");
+
+const statusBox =
+    document.getElementById("status");
+
+
+async function startRecognition() {
+
+    try {
+
+        stream =
+            await navigator.mediaDevices.getUserMedia({
+
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: "user"
+                },
+
+                audio: false
+            });
+
+        video.srcObject = stream;
+
+        const resetResponse =
+            await fetch(
+                "/api/word_reset",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({})
+                }
+            );
+
+        const resetData =
+            await resetResponse.json();
+
+        sessionId =
+            resetData.session_id;
+
+        statusBox.innerText =
+            "Camera started — show your hand";
+
+        wordBox.innerText = "Waiting...";
+
+        if (timer) {
+            clearInterval(timer);
+        }
+
+        timer =
+            setInterval(
+                captureFrame,
+                150
+            );
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusBox.innerText =
+            "Camera permission denied or unavailable.";
+
+        alert(
+            "Please allow camera permission."
+        );
+    }
+}
+
+
+function stopRecognition() {
+
+    if (timer) {
+
+        clearInterval(timer);
+
+        timer = null;
+    }
+
+    if (stream) {
+
+        stream.getTracks().forEach(
+            track => track.stop()
+        );
+
+        stream = null;
+    }
+
+    video.srcObject = null;
+
+    statusBox.innerText =
+        "Camera stopped";
+
+    wordBox.innerText =
+        "—";
+
+    confidenceBox.innerText =
+        "Confidence: —";
+
+    framesBox.innerText =
+        "Frames: 0 / 16";
+
+    sessionId = null;
+}
+
+
+async function captureFrame() {
+
+    if (busy) return;
+
+    if (!stream) return;
+
+    if (video.readyState < 2) return;
+
+    busy = true;
+
+    try {
+
+        const canvas =
+            document.createElement("canvas");
+
+        canvas.width =
+            video.videoWidth;
+
+        canvas.height =
+            video.videoHeight;
+
+        const ctx =
+            canvas.getContext("2d");
+
+        ctx.drawImage(
+            video,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        const image =
+            canvas.toDataURL(
+                "image/jpeg",
+                0.70
+            );
+
+        const response =
+            await fetch(
+                "/api/word_predict",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        image: image,
+
+                        session_id:
+                            sessionId
+
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!data.success) {
+
+            statusBox.innerText =
+                "Error: " + data.error;
+
+            return;
+        }
+
+        sessionId =
+            data.session_id;
+
+        framesBox.innerText =
+            "Frames: " +
+            data.frames +
+            " / 16";
+
+        if (!data.hand_detected) {
+
+            statusBox.innerText =
+                "No hand detected";
+
+            wordBox.innerText =
+                "—";
+
+            confidenceBox.innerText =
+                "Confidence: —";
+
+            framesBox.innerText =
+                "Frames: 0 / 16";
+
+            return;
+        }
+
+        statusBox.innerText =
+            "Hand detected";
+
+        if (data.confidence > 0) {
+
+            confidenceBox.innerText =
+                "Confidence: " +
+                (data.confidence * 100)
+                    .toFixed(1) +
+                "%";
+        }
+
+        if (data.stable && data.word) {
+
+            wordBox.innerText =
+                data.word
+                    .replace("_", " ")
+                    .toUpperCase();
+
+            statusBox.innerText =
+                "Word recognized ✓";
+
+            // Voice output
+            speakWord(
+                data.word
+            );
+
+        } else if (data.word) {
+
+            wordBox.innerText =
+                data.word
+                    .replace("_", " ")
+                    .toUpperCase();
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusBox.innerText =
+            "Connection error";
+
+    } finally {
+
+        busy = false;
+    }
+}
+
+
+let lastSpokenWord = "";
+let lastSpokenTime = 0;
+
+
+function speakWord(word) {
+
+    const now =
+        Date.now();
+
+    if (
+        word === lastSpokenWord &&
+        now - lastSpokenTime < 2500
+    ) {
+        return;
+    }
+
+    lastSpokenWord = word;
+    lastSpokenTime = now;
+
+    if ("speechSynthesis" in window) {
+
+        const text =
+            word.replace("_", " ");
+
+        const utterance =
+            new SpeechSynthesisUtterance(
+                text
+            );
+
+        utterance.lang =
+            "en-IN";
+
+        speechSynthesis.cancel();
+
+        speechSynthesis.speak(
+            utterance
+        );
+    }
+}
+
+</script>
+
+</body>
+</html>

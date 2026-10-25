@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>Learn ISL Words</title>
+
+<style>
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef5ff, #ffffff);
+    color: #172033;
+}
+
+.header {
+    background: #1769e0;
+    color: white;
+    text-align: center;
+    padding: 18px;
+}
+
+.container {
+    width: 95%;
+    max-width: 900px;
+    margin: 25px auto;
+}
+
+.card {
+    background: white;
+    padding: 22px;
+    border-radius: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+    text-align: center;
+}
+
+.word {
+    font-size: 48px;
+    font-weight: bold;
+    color: #1769e0;
+    margin: 25px;
+}
+
+.description {
+    font-size: 18px;
+    margin: 10px;
+}
+
+input {
+    width: 80%;
+    max-width: 500px;
+    padding: 13px;
+    border: 1px solid #bbb;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+button {
+    border: none;
+    padding: 13px 20px;
+    margin: 7px;
+    border-radius: 10px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.primary {
+    background: #1769e0;
+    color: white;
+}
+
+.green {
+    background: #159447;
+    color: white;
+}
+
+.dark {
+    background: #444;
+    color: white;
+}
+
+.word-list {
+    margin-top: 25px;
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+}
+
+.word-item {
+    padding: 12px;
+    background: #f1f6ff;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.resources {
+    margin-top: 25px;
+    text-align: left;
+}
+
+.resources a {
+    display: block;
+    padding: 12px;
+    margin: 8px 0;
+    background: #f1f6ff;
+    border-radius: 10px;
+    color: #1769e0;
+    text-decoration: none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h1>Learn ISL Words</h1>
+</div>
+
+<div class="container">
+
+<div class="card">
+
+<h2>Indian Sign Language Words</h2>
+
+<div class="word"
+     id="word">
+HELLO
+</div>
+
+<div class="description"
+     id="description">
+Learn the ISL sign for HELLO.
+</div>
+
+<button class="primary"
+        onclick="previousWord()">
+← PREVIOUS
+</button>
+
+<button class="primary"
+        onclick="nextWord()">
+NEXT →
+</button>
+
+<br>
+
+<button class="green"
+        onclick="searchImages()">
+SEARCH IMAGES
+</button>
+
+<button class="green"
+        onclick="searchVideos()">
+SEARCH VIDEOS
+</button>
+
+<br>
+
+<button class="dark"
+        onclick="location.href='/'">
+BACK
+</button>
+
+<hr>
+
+<h3>Search Word</h3>
+
+<input
+    id="searchBox"
+    type="text"
+    placeholder="Example: hello">
+
+<br>
+
+<button class="primary"
+        onclick="searchWord()">
+SEARCH
+</button>
+
+<div class="word-list"
+     id="wordList">
+</div>
+
+<div class="resources">
+
+<h3>Official ISL Resources</h3>
+
+<a
+href="https://islrtc.nic.in/faq/"
+target="_blank">
+ISLRTC Indian Sign Language Dictionary
+</a>
+
+<a
+href="https://islrtc.nic.in/video-gallery/"
+target="_blank">
+ISLRTC Video Gallery
+</a>
+
+<a
+href="https://www.youtube.com/@ISLRTCNewDelhi"
+target="_blank">
+ISLRTC Official YouTube Channel
+</a>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+const words = [
+    "hello",
+    "thank_you",
+    "go",
+    "help",
+    "yes",
+    "no",
+    "please",
+    "friend",
+    "market",
+    "mother",
+    "okay",
+    "drink",
+    "father",
+    "you",
+    "today",
+    "food",
+    "teacher",
+    "sorry",
+    "sit",
+    "stop",
+    "hospital",
+    "school",
+    "what"
+];
+
+let index = 0;
+
+
+function displayWord() {
+
+    const word =
+        words[index];
+
+    const readable =
+        word
+        .replaceAll("_", " ")
+        .toUpperCase();
+
+    document.getElementById(
+        "word"
+    ).innerText = readable;
+
+    document.getElementById(
+        "description"
+    ).innerText =
+        "Learn the Indian Sign Language sign for " +
+        readable;
+}
+
+
+function nextWord() {
+
+    index++;
+
+    if (index >= words.length) {
+        index = 0;
+    }
+
+    displayWord();
+}
+
+
+function previousWord() {
+
+    index--;
+
+    if (index < 0) {
+        index = words.length - 1;
+    }
+
+    displayWord();
+}
+
+
+function searchWord() {
+
+    const value =
+        document.getElementById(
+            "searchBox"
+        ).value
+        .trim()
+        .toLowerCase()
+        .replaceAll(" ", "_");
+
+    const found =
+        words.indexOf(value);
+
+    if (found >= 0) {
+
+        index = found;
+
+        displayWord();
+
+        return;
+    }
+
+    searchVideos();
+}
+
+
+function searchImages() {
+
+    const word =
+        words[index]
+        .replaceAll("_", " ");
+
+    const query =
+        encodeURIComponent(
+            "Indian Sign Language " +
+            word
+        );
+
+    window.open(
+        "https://www.google.com/search?tbm=isch&q=" +
+        query,
+        "_blank"
+    );
+}
+
+
+function searchVideos() {
+
+    const word =
+        words[index]
+        .replaceAll("_", " ");
+
+    const query =
+        encodeURIComponent(
+            "Indian Sign Language " +
+            word
+        );
+
+    window.open(
+        "https://www.youtube.com/results?search_query=" +
+        query,
+        "_blank"
+    );
+}
+
+
+function createWordList() {
+
+    const list =
+        document.getElementById(
+            "wordList"
+        );
+
+    list.innerHTML = "";
+
+    words.forEach(
+        (word, i) => {
+
+            const div =
+                document.createElement(
+                    "div"
+                );
+
+            div.className =
+                "word-item";
+
+            div.innerText =
+                word
+                .replaceAll("_", " ")
+                .toUpperCase();
+
+            div.onclick = function() {
+
+                index = i;
+
+                displayWord();
+            };
+
+            list.appendChild(div);
+        }
+    );
+}
+
+
+displayWord();
+
+createWordList();
+
+</script>
+
+</body>
+</html>

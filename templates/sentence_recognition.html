@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>Sentence Recognition</title>
+
+<style>
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef5ff, #ffffff);
+    color: #172033;
+}
+
+.header {
+    background: #1769e0;
+    color: white;
+    text-align: center;
+    padding: 18px;
+}
+
+.container {
+    width: 95%;
+    max-width: 900px;
+    margin: 25px auto;
+}
+
+.card {
+    background: white;
+    padding: 22px;
+    border-radius: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+    margin-bottom: 20px;
+}
+
+video {
+    width: 100%;
+    max-width: 720px;
+    border-radius: 15px;
+    background: black;
+    transform: scaleX(-1);
+    display: block;
+    margin: auto;
+}
+
+button {
+    border: none;
+    padding: 13px 20px;
+    margin: 7px;
+    border-radius: 10px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.start {
+    background: #1769e0;
+    color: white;
+}
+
+.stop {
+    background: #e53935;
+    color: white;
+}
+
+.green {
+    background: #159447;
+    color: white;
+}
+
+.dark {
+    background: #444;
+    color: white;
+}
+
+.status {
+    margin: 12px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.words {
+    padding: 15px;
+    background: #f1f6ff;
+    border-radius: 10px;
+    font-size: 20px;
+    min-height: 30px;
+}
+
+.option {
+    padding: 15px;
+    margin: 10px 0;
+    border: 1px solid #ccd7e8;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.option:hover {
+    background: #eef5ff;
+}
+
+.selected {
+    background: #dceaff;
+    border: 2px solid #1769e0;
+}
+
+.final {
+    font-size: 25px;
+    font-weight: bold;
+    padding: 18px;
+    background: #f1f6ff;
+    border-radius: 12px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h1>ISL Sentence Recognition</h1>
+</div>
+
+<div class="container">
+
+<div class="card">
+
+<h2>Camera Recognition</h2>
+
+<video id="camera"
+       autoplay
+       playsinline></video>
+
+<div style="text-align:center">
+
+<button class="start"
+        onclick="startCamera()">
+START RECOGNITION
+</button>
+
+<button class="stop"
+        onclick="stopCamera()">
+STOP
+</button>
+
+<button class="dark"
+        onclick="clearAll()">
+CLEAR
+</button>
+
+<button class="dark"
+        onclick="location.href='/'">
+BACK
+</button>
+
+</div>
+
+<div class="status"
+     id="status">
+Camera stopped
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Recognized Words</h2>
+
+<div class="words"
+     id="recognizedWords">
+No words recognized yet.
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Choose a Sentence</h2>
+
+<div id="options">
+Show signs to generate sentence options.
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Selected Sentence</h2>
+
+<div class="final"
+     id="finalSentence">
+No sentence selected.
+</div>
+
+<button class="green"
+        onclick="speakSentence()">
+🔊 SPEAK SENTENCE
+</button>
+
+</div>
+
+</div>
+
+
+<script>
+
+let stream = null;
+let timer = null;
+let busy = false;
+
+let sessionId = null;
+
+let recognizedWords = [];
+
+let selectedSentence = "";
+
+let lastStableWord = "";
+
+let lastStableTime = 0;
+
+
+const video =
+    document.getElementById("camera");
+
+const statusBox =
+    document.getElementById("status");
+
+const wordsBox =
+    document.getElementById("recognizedWords");
+
+const optionsBox =
+    document.getElementById("options");
+
+const finalBox =
+    document.getElementById("finalSentence");
+
+
+async function startCamera() {
+
+    try {
+
+        stream =
+            await navigator.mediaDevices
+                .getUserMedia({
+
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"
+                    },
+
+                    audio: false
+                });
+
+        video.srcObject =
+            stream;
+
+        const reset =
+            await fetch(
+                "/api/word_reset",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({})
+                }
+            );
+
+        const resetData =
+            await reset.json();
+
+        sessionId =
+            resetData.session_id;
+
+        statusBox.innerText =
+            "Camera started — show an ISL word";
+
+        if (timer) {
+            clearInterval(timer);
+        }
+
+        timer =
+            setInterval(
+                captureFrame,
+                150
+            );
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusBox.innerText =
+            "Camera permission denied.";
+
+        alert(
+            "Please allow camera permission."
+        );
+    }
+}
+
+
+function stopCamera() {
+
+    if (timer) {
+
+        clearInterval(timer);
+
+        timer = null;
+    }
+
+    if (stream) {
+
+        stream.getTracks().forEach(
+            track => track.stop()
+        );
+
+        stream = null;
+    }
+
+    video.srcObject = null;
+
+    statusBox.innerText =
+        "Camera stopped";
+}
+
+
+async function captureFrame() {
+
+    if (busy) return;
+
+    if (!stream) return;
+
+    if (video.readyState < 2) return;
+
+    busy = true;
+
+    try {
+
+        const canvas =
+            document.createElement(
+                "canvas"
+            );
+
+        canvas.width =
+            video.videoWidth;
+
+        canvas.height =
+            video.videoHeight;
+
+        const ctx =
+            canvas.getContext("2d");
+
+        ctx.drawImage(
+            video,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        const image =
+            canvas.toDataURL(
+                "image/jpeg",
+                0.70
+            );
+
+        const response =
+            await fetch(
+                "/api/word_predict",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        image: image,
+
+                        session_id:
+                            sessionId
+
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!data.success) {
+
+            statusBox.innerText =
+                data.error;
+
+            return;
+        }
+
+        sessionId =
+            data.session_id;
+
+        if (!data.hand_detected) {
+
+            statusBox.innerText =
+                "No hand detected";
+
+            return;
+        }
+
+        statusBox.innerText =
+            "Hand detected";
+
+        if (
+            data.stable &&
+            data.word
+        ) {
+
+            addWord(
+                data.word
+            );
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusBox.innerText =
+            "Connection error";
+
+    } finally {
+
+        busy = false;
+    }
+}
+
+
+function addWord(word) {
+
+    const now =
+        Date.now();
+
+    // Prevent same word from being added
+    // repeatedly every few milliseconds.
+
+    if (
+        word === lastStableWord &&
+        now - lastStableTime < 2500
+    ) {
+
+        return;
+    }
+
+    lastStableWord =
+        word;
+
+    lastStableTime =
+        now;
+
+    if (
+        recognizedWords.length >= 6
+    ) {
+
+        return;
+    }
+
+    recognizedWords.push(
+        word
+    );
+
+    displayWords();
+
+    loadSentenceOptions();
+}
+
+
+function displayWords() {
+
+    if (
+        recognizedWords.length === 0
+    ) {
+
+        wordsBox.innerText =
+            "No words recognized yet.";
+
+        return;
+    }
+
+    wordsBox.innerText =
+        recognizedWords
+            .map(
+                word =>
+                    word
+                    .replaceAll("_", " ")
+                    .toUpperCase()
+            )
+            .join("  →  ");
+}
+
+
+async function loadSentenceOptions() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/sentence_options",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        words:
+                            recognizedWords
+
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !data.success ||
+            !data.options ||
+            data.options.length === 0
+        ) {
+
+            optionsBox.innerText =
+                "No sentence options available for this combination.";
+
+            return;
+        }
+
+        optionsBox.innerHTML = "";
+
+        data.options.forEach(
+            (sentence, index) => {
+
+                const div =
+                    document.createElement(
+                        "div"
+                    );
+
+                div.className =
+                    "option";
+
+                div.innerText =
+                    sentence;
+
+                div.onclick =
+                    function() {
+
+                        document
+                            .querySelectorAll(
+                                ".option"
+                            )
+                            .forEach(
+                                element =>
+                                    element
+                                    .classList
+                                    .remove(
+                                        "selected"
+                                    )
+                            );
+
+                        div.classList.add(
+                            "selected"
+                        );
+
+                        selectedSentence =
+                            sentence;
+
+                        finalBox.innerText =
+                            sentence;
+                    };
+
+                optionsBox.appendChild(
+                    div
+                );
+            }
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        optionsBox.innerText =
+            "Could not load sentence options.";
+    }
+}
+
+
+function speakSentence() {
+
+    if (!selectedSentence) {
+
+        alert(
+            "Please select a sentence first."
+        );
+
+        return;
+    }
+
+    if (
+        "speechSynthesis"
+        in window
+    ) {
+
+        const speech =
+            new SpeechSynthesisUtterance(
+                selectedSentence
+            );
+
+        speech.lang =
+            "en-IN";
+
+        speech.rate =
+            0.9;
+
+        speechSynthesis.cancel();
+
+        speechSynthesis.speak(
+            speech
+        );
+    }
+}
+
+
+function clearAll() {
+
+    recognizedWords = [];
+
+    selectedSentence = "";
+
+    lastStableWord = "";
+
+    lastStableTime = 0;
+
+    wordsBox.innerText =
+        "No words recognized yet.";
+
+    optionsBox.innerText =
+        "Show signs to generate sentence options.";
+
+    finalBox.innerText =
+        "No sentence selected.";
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+
+Flask
+gunicorn
+opencv-python-headless
+mediapipe==0.10.21
+numpy
+joblib
+scikit-learn
+tensorflow

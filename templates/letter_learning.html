@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>Learn ISL Letters</title>
+
+<style>
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef5ff, #ffffff);
+    color: #172033;
+}
+
+.header {
+    background: #1769e0;
+    color: white;
+    text-align: center;
+    padding: 18px;
+}
+
+.container {
+    width: 95%;
+    max-width: 900px;
+    margin: 25px auto;
+}
+
+.card {
+    background: white;
+    padding: 22px;
+    border-radius: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+    text-align: center;
+}
+
+.letter {
+    font-size: 100px;
+    font-weight: bold;
+    color: #1769e0;
+    margin: 15px;
+}
+
+.info {
+    font-size: 18px;
+    margin: 10px;
+}
+
+input {
+    width: 80%;
+    max-width: 500px;
+    padding: 13px;
+    border: 1px solid #bbb;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+button {
+    border: none;
+    padding: 13px 20px;
+    margin: 7px;
+    border-radius: 10px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.primary {
+    background: #1769e0;
+    color: white;
+}
+
+.green {
+    background: #159447;
+    color: white;
+}
+
+.dark {
+    background: #444;
+    color: white;
+}
+
+.resources {
+    margin-top: 25px;
+    text-align: left;
+}
+
+.resources a {
+    display: block;
+    padding: 12px;
+    margin: 8px 0;
+    background: #f1f6ff;
+    border-radius: 10px;
+    color: #1769e0;
+    text-decoration: none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h1>Learn ISL Letters</h1>
+</div>
+
+<div class="container">
+
+<div class="card">
+
+<h2>Indian Sign Language Alphabet</h2>
+
+<div class="letter"
+     id="letter">
+A
+</div>
+
+<div class="info"
+     id="letterInfo">
+Learn the ISL sign for A
+</div>
+
+<button class="primary"
+        onclick="previousLetter()">
+← PREVIOUS
+</button>
+
+<button class="primary"
+        onclick="nextLetter()">
+NEXT →
+</button>
+
+<br>
+
+<button class="green"
+        onclick="searchImages()">
+SEARCH IMAGES
+</button>
+
+<button class="green"
+        onclick="searchVideos()">
+SEARCH VIDEOS
+</button>
+
+<br>
+
+<button class="dark"
+        onclick="location.href='/'">
+BACK
+</button>
+
+<hr>
+
+<h3>Search a Letter</h3>
+
+<input
+    id="searchBox"
+    type="text"
+    maxlength="1"
+    placeholder="Enter A-Z">
+
+<br>
+
+<button class="primary"
+        onclick="searchLetter()">
+SEARCH LETTER
+</button>
+
+<div class="resources">
+
+<h3>Official ISL Learning Resources</h3>
+
+<a
+href="https://islrtc.nic.in/faq/"
+target="_blank">
+ISLRTC Indian Sign Language Dictionary Information
+</a>
+
+<a
+href="https://islrtc.nic.in/video-gallery/"
+target="_blank">
+ISLRTC Video Gallery
+</a>
+
+<a
+href="https://www.youtube.com/@ISLRTCNewDelhi"
+target="_blank">
+ISLRTC Official YouTube Channel
+</a>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+const letters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+let index = 0;
+
+
+function showLetter() {
+
+    const letter =
+        letters[index];
+
+    document.getElementById(
+        "letter"
+    ).innerText = letter;
+
+    document.getElementById(
+        "letterInfo"
+    ).innerText =
+        "Learn the Indian Sign Language sign for " +
+        letter;
+}
+
+
+function nextLetter() {
+
+    index++;
+
+    if (index >= letters.length) {
+        index = 0;
+    }
+
+    showLetter();
+}
+
+
+function previousLetter() {
+
+    index--;
+
+    if (index < 0) {
+        index = letters.length - 1;
+    }
+
+    showLetter();
+}
+
+
+function searchLetter() {
+
+    let value =
+        document.getElementById(
+            "searchBox"
+        ).value
+        .trim()
+        .toUpperCase();
+
+    if (!letters.includes(value)) {
+
+        alert(
+            "Please enter one letter from A to Z."
+        );
+
+        return;
+    }
+
+    index =
+        letters.indexOf(value);
+
+    showLetter();
+
+    searchImages();
+}
+
+
+function searchImages() {
+
+    const letter =
+        letters[index];
+
+    const query =
+        encodeURIComponent(
+            "Indian Sign Language " +
+            letter +
+            " alphabet"
+        );
+
+    window.open(
+        "https://www.google.com/search?tbm=isch&q=" +
+        query,
+        "_blank"
+    );
+}
+
+
+function searchVideos() {
+
+    const letter =
+        letters[index];
+
+    const query =
+        encodeURIComponent(
+            "Indian Sign Language " +
+            letter +
+            " alphabet"
+        );
+
+    window.open(
+        "https://www.youtube.com/results?search_query=" +
+        query,
+        "_blank"
+    );
+}
+
+showLetter();
+
+</script>
+
+</body>
+</html>
